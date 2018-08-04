@@ -21,7 +21,6 @@ import com.navercorp.pinpoint.common.hbase.namespace.HbaseNamespaceValidator;
 import com.navercorp.pinpoint.common.hbase.namespace.NamespaceValidator;
 import com.navercorp.pinpoint.common.hbase.util.HbaseTableNameCache;
 import com.navercorp.pinpoint.common.util.StringUtils;
-import org.apache.hadoop.hbase.NamespaceDescriptor;
 import org.apache.hadoop.hbase.TableName;
 
 import java.util.Objects;
@@ -47,7 +46,7 @@ public class HbaseTableNameProvider implements TableNameProvider {
 
     private String requireValidation(String namespace, NamespaceValidator namespaceValidator) {
         if (StringUtils.isEmpty(namespace)) {
-            return NamespaceDescriptor.DEFAULT_NAMESPACE_NAME_STR;
+            throw new IllegalArgumentException("Namespace must not be empty");
         }
         if (!namespaceValidator.validate(namespace)) {
             throw new IllegalArgumentException("Invalid namespace : " + namespace);

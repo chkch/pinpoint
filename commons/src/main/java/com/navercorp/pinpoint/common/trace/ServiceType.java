@@ -52,9 +52,17 @@ import static com.navercorp.pinpoint.common.trace.ServiceTypeProperty.*;
  * <tr><td>1051</td><td>VERTX_INTERNAL</td></tr>
  * <tr><td>1052</td><td>VERTX_HTTP_SERVER</td></tr>
  * <tr><td>1053</td><td>VERTX_HTTP_SERVER_INTERNAL</td></tr>
+ * <tr><td>1060</td><td>WEBSPHERE</td></tr>
+ * <tr><td>1061</td><td>WEBSPHERE_METHOD</td></tr>
+ * <tr><td>1070</td><td>WEBLOGIC</td></tr>
+ * <tr><td>1071</td><td>WEBLOGIC_METHOD</td></tr>
+ * <tr><td>1080</td><td>RESERVED</td></tr>
+ * <tr><td>1081</td><td>RESERVED</td></tr>
  * <tr><td>1100</td><td>THRIFT_SERVER</td></tr>
  * <tr><td>1101</td><td>THRIFT_SERVER_INTERNAL</td></tr>
  * <tr><td>1110</td><td>DUBBO_PROVIDER</td></tr>
+ * <tr><td>1120</td><td>UNDERTOW</td></tr>
+ * <tr><td>1121</td><td>UNDERTOW_METHOD</td></tr>
  *
  * <tr><td>1500</td><td>PHP</td></tr>
  * <tr><td>1501</td><td>PHP_METHOD</td></tr>
@@ -102,6 +110,7 @@ import static com.navercorp.pinpoint.common.trace.ServiceTypeProperty.*;
  * <tr><td>5012</td><td>JSON-LIB</td></tr>
  * <tr><td>5050</td><td>SPRING</td></tr>
  * <tr><td>5051</td><td>SPRING_MVC</td></tr>
+ * <tr><td>5052</td><td>SPRING_ASYNC</td></tr>
  * <tr><td>5061</td><td><i>RESERVED</i></td></tr>
  * <tr><td>5071</td><td>SPRING_BEAN</td></tr>
  * <tr><td>5500</td><td>IBATIS</td></tr>
@@ -236,11 +245,11 @@ public interface ServiceType {
     ServiceType UNAUTHORIZED = of(1007, "UNAUTHORIZED", RECORD_STATISTICS);
 
     // Added for php agent.
-    @Deprecated
-    ServiceType PHP = ServiceTypeFactory.of(1500, "PHP", RECORD_STATISTICS);
+    //@Deprecated
+    //ServiceType PHP = ServiceTypeFactory.of(1500, "PHP", RECORD_STATISTICS);
     // Added for php agent.
-    @Deprecated
-    ServiceType PHP_METHOD = ServiceTypeFactory.of(1501, "PHP_METHOD");
+    //@Deprecated
+    //ServiceType PHP_METHOD = ServiceTypeFactory.of(1501, "PHP_METHOD");
 
 
     /**
@@ -253,6 +262,7 @@ public interface ServiceType {
     // Internal method
     // FIXME it's not clear to put internal method here. but do that for now.
     ServiceType INTERNAL_METHOD = of(5000, "INTERNAL_METHOD");
+    ServiceType SERVLET = of(5004, "SERVLET");
     
 
     // Spring framework

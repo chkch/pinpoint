@@ -16,8 +16,9 @@
 package com.navercorp.pinpoint.flink.receiver;
 
 import com.navercorp.pinpoint.flink.Bootstrap;
+import com.navercorp.pinpoint.flink.vo.RawData;
+import com.navercorp.pinpoint.io.request.ServerRequest;
 import org.apache.flink.streaming.api.functions.source.ParallelSourceFunction;
-import org.apache.thrift.TBase;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.ApplicationContext;
@@ -26,12 +27,12 @@ import org.springframework.context.ConfigurableApplicationContext;
 /**
  * @author minwoo.jung
  */
-public class TcpSourceFunction implements ParallelSourceFunction<TBase> {
+public class TcpSourceFunction implements ParallelSourceFunction<RawData> {
 
     private final Logger logger = LoggerFactory.getLogger(TcpSourceFunction.class);
 
     @Override
-    public void run(SourceContext<TBase> ctx) throws Exception {
+    public void run(SourceContext<RawData> ctx) throws Exception {
         final Bootstrap bootstrap = Bootstrap.getInstance();
         bootstrap.setStatHandlerTcpDispatchHandler(ctx);
         bootstrap.initFlinkServerRegister();
