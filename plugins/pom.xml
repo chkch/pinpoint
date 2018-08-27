@@ -79,6 +79,7 @@
         <module>php</module>
         <module>akka-http</module>
         <module>undertow</module>
+        <module>kafka</module>
     </modules>
 
     <dependencies>
@@ -319,12 +320,12 @@
         </dependency>
         <dependency>
             <groupId>com.navercorp.pinpoint</groupId>
-            <artifactId>pinpoint-php-plugin</artifactId>
+            <artifactId>pinpoint-undertow-plugin</artifactId>
             <version>${project.version}</version>
         </dependency>
         <dependency>
             <groupId>com.navercorp.pinpoint</groupId>
-            <artifactId>pinpoint-undertow-plugin</artifactId>
+            <artifactId>pinpoint-kafka-plugin</artifactId>
             <version>${project.version}</version>
         </dependency>
     </dependencies>
