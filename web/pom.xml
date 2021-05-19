@@ -32,7 +32,7 @@
         <jdk.home>${env.JAVA_8_HOME}</jdk.home>
         <maven.build.timestamp.format>yyyyMMddHHmmss</maven.build.timestamp.format>
         <sniffer.artifactid>java18</sniffer.artifactid>
-        <fastxml.jackson.version>2.8.10</fastxml.jackson.version>
+        <fastxml.jackson.version>2.12.3</fastxml.jackson.version>
         <grunt.build.command>build_release_without_lint</grunt.build.command>
     </properties>
 
@@ -379,13 +379,13 @@
                         <configuration>
                             <target>
                                 <copy todir="${basedir}/target/grunt" failonerror="true" verbose="true">
-                                    <fileset dir="${basedir}/src/grunt" />
+                                    <fileset dir="${basedir}/src/grunt"/>
                                 </copy>
                                 <copy todir="${basedir}/target/main/webapp" failonerror="true" verbose="true">
-                                    <fileset dir="${basedir}/src/main/webapp" />
+                                    <fileset dir="${basedir}/src/main/webapp"/>
                                 </copy>
-                                <copy file="${basedir}/src/Gruntfile.js" tofile="${basedir}/target/Gruntfile.js" failonerror="true" verbose="true" />
-                                <copy file="${basedir}/src/package.json" tofile="${basedir}/target/package.json" failonerror="true" verbose="true" />
+                                <copy file="${basedir}/src/Gruntfile.js" tofile="${basedir}/target/Gruntfile.js" failonerror="true" verbose="true"/>
+                                <copy file="${basedir}/src/package.json" tofile="${basedir}/target/package.json" failonerror="true" verbose="true"/>
                             </target>
                         </configuration>
                     </execution>
