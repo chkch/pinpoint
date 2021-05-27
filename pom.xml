@@ -98,7 +98,7 @@
         <metrics.version>3.1.2</metrics.version>
         <fastxml.jackson.version>2.6.7</fastxml.jackson.version>
         <httpcomponents.version>4.3</httpcomponents.version>
-        <spring.version>4.3.8.RELEASE</spring.version>
+        <spring.version>5.2.15.RELEASE</spring.version>
         <spring.batch.version>3.0.7.RELEASE</spring.batch.version>
         <spring.security.version>4.2.2.RELEASE</spring.security.version>
         <asm.version>6.1</asm.version>
@@ -860,7 +860,7 @@
                 <version>1.6.0</version>
                 <configuration>
                     <options>sub, boss, newcap, loopfunc</options>
-                    <globals></globals>
+                    <globals/>
                     <directories>
                         <directory>src/main/webapp</directory>
                     </directories>
