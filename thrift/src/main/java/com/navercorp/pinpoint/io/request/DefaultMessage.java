@@ -29,10 +29,10 @@ public class DefaultMessage<T> implements Message<T> {
 
     public DefaultMessage(Header header, HeaderEntity headerEntity, T data) {
         if (header == null) {
-            throw new NullPointerException("header must not be null");
+            throw new NullPointerException("header");
         }
         if (headerEntity == null) {
-            throw new NullPointerException("headerEntity must not be null");
+            throw new NullPointerException("headerEntity");
         }
 
         this.header = header;
@@ -53,5 +53,14 @@ public class DefaultMessage<T> implements Message<T> {
     @Override
     public T getData() {
         return data;
+    }
+
+    @Override
+    public String toString() {
+        return "DefaultMessage{" +
+                "header=" + header +
+                ", headerEntity=" + headerEntity +
+                ", data=" + data +
+                '}';
     }
 }

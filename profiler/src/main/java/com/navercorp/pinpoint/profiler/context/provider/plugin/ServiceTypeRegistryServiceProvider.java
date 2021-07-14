@@ -18,11 +18,11 @@ package com.navercorp.pinpoint.profiler.context.provider.plugin;
 
 import com.google.inject.Inject;
 import com.google.inject.Provider;
-import com.navercorp.pinpoint.common.service.DefaultServiceTypeRegistryService;
-import com.navercorp.pinpoint.common.service.ServiceTypeRegistryService;
-import com.navercorp.pinpoint.common.service.TraceMetadataLoaderService;
-import com.navercorp.pinpoint.common.util.Assert;
-import com.navercorp.pinpoint.common.util.logger.CommonLoggerFactory;
+import com.navercorp.pinpoint.loader.service.DefaultServiceTypeRegistryService;
+import com.navercorp.pinpoint.loader.service.ServiceTypeRegistryService;
+import com.navercorp.pinpoint.loader.service.TraceMetadataLoaderService;
+
+import java.util.Objects;
 
 /**
  * @author Woonduk Kang(emeroad)
@@ -30,18 +30,15 @@ import com.navercorp.pinpoint.common.util.logger.CommonLoggerFactory;
 public class ServiceTypeRegistryServiceProvider implements Provider<ServiceTypeRegistryService> {
 
     private final TraceMetadataLoaderService traceMetadataLoaderService;
-    private final CommonLoggerFactory commonLoggerFactory;
 
     @Inject
-    public ServiceTypeRegistryServiceProvider(CommonLoggerFactory commonLoggerFactory, TraceMetadataLoaderService traceMetadataLoaderService) {
-        this.traceMetadataLoaderService = Assert.requireNonNull(traceMetadataLoaderService, "traceMetadataLoaderService must not be null");
-        this.commonLoggerFactory = Assert.requireNonNull(commonLoggerFactory, "commonLoggerFactory must not be null");
+    public ServiceTypeRegistryServiceProvider(TraceMetadataLoaderService traceMetadataLoaderService) {
+        this.traceMetadataLoaderService = Objects.requireNonNull(traceMetadataLoaderService, "traceMetadataLoaderService");
     }
 
     @Override
     public ServiceTypeRegistryService get() {
-
-        ServiceTypeRegistryService serviceTypeRegistryService = new DefaultServiceTypeRegistryService(traceMetadataLoaderService, commonLoggerFactory);
+        ServiceTypeRegistryService serviceTypeRegistryService = new DefaultServiceTypeRegistryService(traceMetadataLoaderService);
         return serviceTypeRegistryService ;
     }
 }

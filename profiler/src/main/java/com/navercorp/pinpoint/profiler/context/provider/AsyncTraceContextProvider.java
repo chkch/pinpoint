@@ -19,12 +19,12 @@ package com.navercorp.pinpoint.profiler.context.provider;
 import com.google.inject.Inject;
 import com.google.inject.Provider;
 import com.navercorp.pinpoint.bootstrap.context.Trace;
-import com.navercorp.pinpoint.common.util.Assert;
 import com.navercorp.pinpoint.profiler.context.AsyncTraceContext;
 import com.navercorp.pinpoint.profiler.context.BaseTraceFactory;
 import com.navercorp.pinpoint.profiler.context.Binder;
 import com.navercorp.pinpoint.profiler.context.DefaultAsyncTraceContext;
-import com.navercorp.pinpoint.profiler.context.id.AsyncIdGenerator;
+
+import java.util.Objects;
 
 /**
  * @author Woonduk Kang(emeroad)
@@ -32,25 +32,21 @@ import com.navercorp.pinpoint.profiler.context.id.AsyncIdGenerator;
 public class AsyncTraceContextProvider implements Provider<AsyncTraceContext> {
 
 
-    private final AsyncIdGenerator asyncIdGenerator;
     private Provider<BaseTraceFactory> baseTraceFactoryProvider;
     private final Binder<Trace> binder;
 
     @Inject
-    public AsyncTraceContextProvider(final AsyncIdGenerator asyncIdGenerator, Binder<Trace> binder) {
-        this.asyncIdGenerator = Assert.requireNonNull(asyncIdGenerator, "asyncIdGenerator must not be null");
-        this.binder = Assert.requireNonNull(binder, "binder must not be null");
+    public AsyncTraceContextProvider(Binder<Trace> binder) {
+        this.binder = Objects.requireNonNull(binder, "binder");
     }
 
     @Inject
     public void setBaseTraceFactoryProvider(Provider<BaseTraceFactory> baseTraceFactoryProvider) {
-        this.baseTraceFactoryProvider = Assert.requireNonNull(baseTraceFactoryProvider, "baseTraceFactoryProvider must not be null");
+        this.baseTraceFactoryProvider = Objects.requireNonNull(baseTraceFactoryProvider, "baseTraceFactoryProvider");
     }
 
     @Override
     public AsyncTraceContext get() {
-        Assert.requireNonNull(asyncIdGenerator, "asyncIdGenerator must not be null");
-
-        return new DefaultAsyncTraceContext(baseTraceFactoryProvider,  asyncIdGenerator, binder);
+        return new DefaultAsyncTraceContext(baseTraceFactoryProvider,  binder);
     }
 }

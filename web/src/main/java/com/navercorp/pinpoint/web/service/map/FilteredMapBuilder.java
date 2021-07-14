@@ -18,12 +18,18 @@ package com.navercorp.pinpoint.web.service.map;
 
 import com.navercorp.pinpoint.common.server.bo.SpanBo;
 import com.navercorp.pinpoint.common.server.bo.SpanEventBo;
-import com.navercorp.pinpoint.common.service.ServiceTypeRegistryService;
 import com.navercorp.pinpoint.common.trace.HistogramSchema;
 import com.navercorp.pinpoint.common.trace.HistogramSlot;
 import com.navercorp.pinpoint.common.trace.ServiceType;
+import com.navercorp.pinpoint.common.util.CollectionUtils;
+import com.navercorp.pinpoint.loader.service.ServiceTypeRegistryService;
 import com.navercorp.pinpoint.web.applicationmap.rawdata.LinkDataDuplexMap;
 import com.navercorp.pinpoint.web.applicationmap.rawdata.LinkDataMap;
+import com.navercorp.pinpoint.web.filter.visitor.SpanAcceptor;
+import com.navercorp.pinpoint.web.filter.visitor.SpanEventVisitAdaptor;
+import com.navercorp.pinpoint.web.filter.visitor.SpanEventVisitor;
+import com.navercorp.pinpoint.web.filter.visitor.SpanReader;
+import com.navercorp.pinpoint.web.filter.visitor.SpanVisitor;
 import com.navercorp.pinpoint.web.security.ServerMapDataFilter;
 import com.navercorp.pinpoint.web.service.ApplicationFactory;
 import com.navercorp.pinpoint.web.service.DotExtractor;
@@ -32,14 +38,19 @@ import com.navercorp.pinpoint.web.util.TimeWindowDownSampler;
 import com.navercorp.pinpoint.web.vo.Application;
 import com.navercorp.pinpoint.web.vo.Range;
 import com.navercorp.pinpoint.web.vo.ResponseHistograms;
-import org.apache.commons.collections.CollectionUtils;
+import com.navercorp.pinpoint.web.vo.scatter.Dot;
+
 import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.util.LinkedMultiValueMap;
+import org.springframework.util.MultiValueMap;
 
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 /**
  * @author HyunGil Jeong
@@ -51,8 +62,6 @@ public class FilteredMapBuilder {
     private final ApplicationFactory applicationFactory;
 
     private final ServiceTypeRegistryService registry;
-
-    private final Range range;
 
     private final int version;
 
@@ -67,26 +76,19 @@ public class FilteredMapBuilder {
     // @Nullable
     private ServerMapDataFilter serverMapDataFilter;
 
+    private final Map<String, Application> applicationHashMap = new HashMap<>();
 
     public FilteredMapBuilder(ApplicationFactory applicationFactory, ServiceTypeRegistryService registry, Range range, int version) {
-        if (applicationFactory == null) {
-            throw new NullPointerException("applicationFactory must not be null");
-        }
-        if (registry == null) {
-            throw new NullPointerException("registry must not be null");
-        }
-        if (range == null) {
-            throw new NullPointerException("range must not be null");
-        }
-        this.applicationFactory = applicationFactory;
-        this.registry = registry;
-        this.range = range;
+        this.applicationFactory = Objects.requireNonNull(applicationFactory, "applicationFactory");
+        this.registry = Objects.requireNonNull(registry, "registry");
+
         this.version = version;
 
-        this.timeWindow = new TimeWindow(this.range, TimeWindowDownSampler.SAMPLER);
+        Objects.requireNonNull(range, "range");
+        this.timeWindow = new TimeWindow(range, TimeWindowDownSampler.SAMPLER);
         this.linkDataDuplexMap = new LinkDataDuplexMap();
-        this.responseHistogramsBuilder = new ResponseHistograms.Builder(this.range);
-        this.dotExtractor = new DotExtractor(this.applicationFactory);
+        this.responseHistogramsBuilder = new ResponseHistograms.Builder(range);
+        this.dotExtractor = new DotExtractor();
     }
 
     public FilteredMapBuilder serverMapDataFilter(ServerMapDataFilter serverMapDataFilter) {
@@ -102,7 +104,7 @@ public class FilteredMapBuilder {
     }
 
     public FilteredMapBuilder addTransaction(List<SpanBo> transaction) {
-        final Map<Long, SpanBo> transactionSpanMap = checkDuplicatedSpanId(transaction);
+        final MultiValueMap<Long, SpanBo> transactionSpanMap = createTransactionSpanMap(transaction);
 
         for (SpanBo span : transaction) {
             final Application parentApplication = createParentApplication(span, transactionSpanMap, version);
@@ -118,6 +120,10 @@ public class FilteredMapBuilder {
             }
 
             final short slotTime = getHistogramSlotTime(span, spanApplication.getServiceType());
+            final HistogramSchema histogramSchema = spanApplication.getServiceType().getHistogramSchema();
+            final short sumElapsedSlotTime = histogramSchema.getSumStatSlot().getSlotTime();
+            final short maxElapsedSlotTime = histogramSchema.getMaxStatSlot().getSlotTime();
+            final int elapsed = span.getElapsed();
             // might need to reconsider using collector's accept time for link statistics.
             // we need to convert to time window's timestamp. If not, it may lead to OOM due to mismatch in timeslots.
             long timestamp = timeWindow.refineTimestamp(span.getCollectorAcceptTime());
@@ -128,7 +134,9 @@ public class FilteredMapBuilder {
                     logger.trace("span user:{} {} -> span:{} {}", parentApplication, span.getAgentId(), spanApplication, span.getAgentId());
                 }
                 final LinkDataMap sourceLinkData = linkDataDuplexMap.getSourceLinkDataMap();
-                sourceLinkData.addLinkData(parentApplication, span.getAgentId(), spanApplication,  span.getAgentId(), timestamp, slotTime, 1);
+                sourceLinkData.addLinkData(parentApplication, span.getAgentId(), spanApplication, span.getAgentId(), timestamp, slotTime, 1);
+                sourceLinkData.addLinkData(parentApplication, span.getAgentId(), spanApplication, span.getAgentId(), timestamp, maxElapsedSlotTime, elapsed);
+                sourceLinkData.addLinkData(parentApplication, span.getAgentId(), spanApplication, span.getAgentId(), timestamp, sumElapsedSlotTime, elapsed);
 
                 if (logger.isTraceEnabled()) {
                     logger.trace("span target user:{} {} -> span:{} {}", parentApplication, span.getAgentId(), spanApplication, span.getAgentId());
@@ -136,6 +144,8 @@ public class FilteredMapBuilder {
                 // Inbound data
                 final LinkDataMap targetLinkDataMap = linkDataDuplexMap.getTargetLinkDataMap();
                 targetLinkDataMap.addLinkData(parentApplication, span.getAgentId(), spanApplication, span.getAgentId(), timestamp, slotTime, 1);
+                targetLinkDataMap.addLinkData(parentApplication, span.getAgentId(), spanApplication, span.getAgentId(), timestamp, maxElapsedSlotTime, elapsed);
+                targetLinkDataMap.addLinkData(parentApplication, span.getAgentId(), spanApplication, span.getAgentId(), timestamp, sumElapsedSlotTime, elapsed);
             } else {
                 // Inbound data
                 if (logger.isTraceEnabled()) {
@@ -143,32 +153,41 @@ public class FilteredMapBuilder {
                 }
                 final LinkDataMap targetLinkDataMap = linkDataDuplexMap.getTargetLinkDataMap();
                 targetLinkDataMap.addLinkData(parentApplication, span.getAgentId(), spanApplication, span.getAgentId(), timestamp, slotTime, 1);
+                targetLinkDataMap.addLinkData(parentApplication, span.getAgentId(), spanApplication, span.getAgentId(), timestamp, maxElapsedSlotTime, elapsed);
+                targetLinkDataMap.addLinkData(parentApplication, span.getAgentId(), spanApplication, span.getAgentId(), timestamp, sumElapsedSlotTime, elapsed);
             }
 
-            dotExtractor.addDot(span);
+            addDot(span, spanApplication);
 
             if (serverMapDataFilter != null && serverMapDataFilter.filter(spanApplication)) {
                 continue;
             }
 
-            addNodeFromSpanEvent(span, transactionSpanMap);
+            addNodeFromSpanEvent(span, spanApplication, transactionSpanMap);
         }
         return this;
     }
 
-    private Map<Long, SpanBo> checkDuplicatedSpanId(List<SpanBo> transaction) {
-        final Map<Long, SpanBo> transactionSpanMap = new HashMap<>();
+    private void addDot(SpanBo span, Application srcApplication) {
+        final Dot dot = this.dotExtractor.newDot(span);
+        this.dotExtractor.addDot(srcApplication, dot);
+    }
+
+    private MultiValueMap<Long, SpanBo> createTransactionSpanMap(List<SpanBo> transaction) {
+        final MultiValueMap<Long, SpanBo> transactionSpanMap = new LinkedMultiValueMap<>(transaction.size());
         for (SpanBo span : transaction) {
-            final SpanBo old = transactionSpanMap.put(span.getSpanId(), span);
-            if (old != null) {
-                logger.warn("duplicated span found:{}", old);
+            if (transactionSpanMap.containsKey(span.getSpanId())) {
+                logger.warn("duplicated span found:{}", span);
             }
+
+            transactionSpanMap.add(span.getSpanId(), span);
         }
         return transactionSpanMap;
     }
 
-    private Application createParentApplication(SpanBo span, Map<Long, SpanBo> transactionSpanMap, int version) {
-        final SpanBo parentSpan = transactionSpanMap.get(span.getParentSpanId());
+    private Application createParentApplication(SpanBo span, MultiValueMap<Long, SpanBo> transactionSpanMap, int version) {
+        final SpanBo parentSpan = getParentsSpan(span, transactionSpanMap);
+
         if (span.isRoot() || parentSpan == null) {
             ServiceType spanServiceType = this.registry.findServiceType(span.getServiceType());
             if (spanServiceType.isQueue()) {
@@ -210,51 +229,99 @@ public class FilteredMapBuilder {
         }
     }
 
-    private void addNodeFromSpanEvent(SpanBo span, Map<Long, SpanBo> transactionSpanMap) {
-        /*
-         * add span event statistics
-         */
-        final List<SpanEventBo> spanEventBoList = span.getSpanEventBoList();
-        if (CollectionUtils.isEmpty(spanEventBoList)) {
-            return;
+    private SpanBo getParentsSpan(SpanBo currentSpan, MultiValueMap<Long, SpanBo> transactionSpanMap) {
+        List<SpanBo> parentSpanCandidateList = transactionSpanMap.get(currentSpan.getParentSpanId());
+        if (parentSpanCandidateList == null) {
+            return null;
         }
-        final Application srcApplication = applicationFactory.createApplication(span.getApplicationId(), span.getApplicationServiceType());
 
-        LinkDataMap sourceLinkDataMap = linkDataDuplexMap.getSourceLinkDataMap();
-        for (SpanEventBo spanEvent : spanEventBoList) {
+        if (CollectionUtils.nullSafeSize(parentSpanCandidateList) == 1) {
+            return parentSpanCandidateList.get(0);
+        } else {
+            for (SpanBo parentSpanCandidate : parentSpanCandidateList) {
+                SpanAcceptor acceptor = new SpanReader(Collections.singletonList(parentSpanCandidate));
+                boolean accept = acceptor.accept(new SpanEventVisitAdaptor(new SpanEventVisitor() {
+                    @Override
+                    public boolean visit(SpanEventBo spanEventBo) {
+                        if (spanEventBo.getNextSpanId() == currentSpan.getSpanId()) {
+                            return SpanVisitor.ACCEPT;
+                        }
+                        return SpanVisitor.REJECT;
+                    }
+                }));
 
-            ServiceType destServiceType = registry.findServiceType(spanEvent.getServiceType());
-            if (!destServiceType.isRecordStatistics()) {
-                // internal method
-                continue;
-            }
-            // convert to Unknown if destServiceType is a rpc client and there is no acceptor.
-            // acceptor exists if there is a span with spanId identical to the current spanEvent's next spanId.
-            // logic for checking acceptor
-            if (destServiceType.isRpcClient()) {
-                if (!transactionSpanMap.containsKey(spanEvent.getNextSpanId())) {
-                    destServiceType = ServiceType.UNKNOWN;
+                if (accept) {
+                    return parentSpanCandidate;
                 }
             }
 
-            String dest = spanEvent.getDestinationId();
-            if (dest == null) {
-                dest = "Unknown";
-            }
-
-            final Application destApplication = this.applicationFactory.createApplication(dest, destServiceType);
-
-            final short slotTime = getHistogramSlotTime(spanEvent, destServiceType);
-
-            // FIXME
-            final long spanEventTimeStamp = timeWindow.refineTimestamp(span.getStartTime() + spanEvent.getStartElapsed());
-            if (logger.isTraceEnabled()) {
-                logger.trace("spanEvent  src:{} {} -> dest:{} {}", srcApplication, span.getAgentId(), destApplication, spanEvent.getEndPoint());
-            }
-            // endPoint may be null
-            final String destinationAgentId = StringUtils.defaultString(spanEvent.getEndPoint());
-            sourceLinkDataMap.addLinkData(srcApplication, span.getAgentId(), destApplication, destinationAgentId, spanEventTimeStamp, slotTime, 1);
+            logger.warn("Can not find suitable ParentSpan.(CurrentSpan:{})", currentSpan);
+            return parentSpanCandidateList.get(0);
         }
+    }
+
+    private void addNodeFromSpanEvent(SpanBo span, Application srcApplication, MultiValueMap<Long, SpanBo> transactionSpanMap) {
+        /*
+         * add span event statistics
+         */
+        LinkDataMap sourceLinkDataMap = linkDataDuplexMap.getSourceLinkDataMap();
+
+        SpanAcceptor acceptor = new SpanReader(Collections.singletonList(span));
+        acceptor.accept(new SpanEventVisitAdaptor(new SpanEventVisitor() {
+            @Override
+            public boolean visit(SpanEventBo spanEventBo) {
+                addNode(span, transactionSpanMap, srcApplication, sourceLinkDataMap, spanEventBo);
+                return SpanVisitor.REJECT;
+            }
+        }));
+    }
+
+    private void addNode(SpanBo span, MultiValueMap<Long, SpanBo> transactionSpanMap, Application srcApplication, LinkDataMap sourceLinkDataMap, SpanEventBo spanEvent) {
+        ServiceType destServiceType = registry.findServiceType(spanEvent.getServiceType());
+
+        if (destServiceType.isAlias()) {
+            final Application destApplication = this.applicationFactory.createApplication(spanEvent.getDestinationId(), destServiceType);
+            applicationHashMap.putIfAbsent(spanEvent.getEndPoint(), destApplication);
+        }
+
+        if (!destServiceType.isRecordStatistics()) {
+            // internal method
+            return;
+        }
+
+        String dest = StringUtils.defaultString(spanEvent.getDestinationId(), "Unknown");
+
+        // convert to Unknown if destServiceType is a rpc client and there is no acceptor.
+        // acceptor exists if there is a span with spanId identical to the current spanEvent's next spanId.
+        // logic for checking acceptor
+        if (destServiceType.isRpcClient()) {
+            if (!transactionSpanMap.containsKey(spanEvent.getNextSpanId())) {
+
+                Application replacedApplication = applicationHashMap.get(spanEvent.getDestinationId());
+                if (replacedApplication == null) {
+                    destServiceType = ServiceType.UNKNOWN;
+                } else {
+                    //replace with alias instead of Unkown when exists
+                    logger.debug("replace with alias {}", replacedApplication.getServiceType());
+                    destServiceType = replacedApplication.getServiceType();
+                    dest = replacedApplication.getName();
+                }
+            }
+        }
+
+
+        final Application destApplication = this.applicationFactory.createApplication(dest, destServiceType);
+
+        final short slotTime = getHistogramSlotTime(spanEvent, destServiceType);
+
+        // FIXME
+        final long spanEventTimeStamp = timeWindow.refineTimestamp(span.getStartTime() + spanEvent.getStartElapsed());
+        if (logger.isTraceEnabled()) {
+            logger.trace("spanEvent  src:{} {} -> dest:{} {}", srcApplication, span.getAgentId(), destApplication, spanEvent.getEndPoint());
+        }
+        // endPoint may be null
+        final String destinationAgentId = StringUtils.defaultString(spanEvent.getEndPoint());
+        sourceLinkDataMap.addLinkData(srcApplication, span.getAgentId(), destApplication, destinationAgentId, spanEventTimeStamp, slotTime, 1);
     }
 
     public FilteredMap build() {

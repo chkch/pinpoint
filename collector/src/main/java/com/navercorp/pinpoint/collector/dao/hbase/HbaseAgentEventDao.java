@@ -16,7 +16,16 @@
 
 package com.navercorp.pinpoint.collector.dao.hbase;
 
-import com.navercorp.pinpoint.common.hbase.TableNameProvider;
+import com.navercorp.pinpoint.collector.dao.AgentEventDao;
+import com.navercorp.pinpoint.collector.util.CollectorUtils;
+import com.navercorp.pinpoint.common.hbase.HbaseColumnFamily;
+import com.navercorp.pinpoint.common.hbase.HbaseOperations2;
+import com.navercorp.pinpoint.common.hbase.TableDescriptor;
+import com.navercorp.pinpoint.common.hbase.ValueMapper;
+import com.navercorp.pinpoint.common.server.bo.event.AgentEventBo;
+import com.navercorp.pinpoint.common.server.bo.serializer.agent.AgentIdRowKeyEncoder;
+import com.navercorp.pinpoint.common.server.util.AgentEventType;
+
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.slf4j.Logger;
@@ -24,15 +33,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Repository;
 
-import com.navercorp.pinpoint.collector.dao.AgentEventDao;
-import com.navercorp.pinpoint.collector.dao.hbase.mapper.AgentEventValueMapper;
-import com.navercorp.pinpoint.common.server.bo.event.AgentEventBo;
-import com.navercorp.pinpoint.common.hbase.HBaseTables;
-import com.navercorp.pinpoint.common.hbase.HbaseOperations2;
-import com.navercorp.pinpoint.common.server.util.AgentEventType;
-import com.navercorp.pinpoint.common.util.BytesUtils;
-import com.navercorp.pinpoint.common.server.util.RowKeyUtils;
-import com.navercorp.pinpoint.common.util.TimeUtils;
+import java.util.Objects;
 
 /**
  * @author HyunGil Jeong
@@ -42,24 +43,30 @@ public class HbaseAgentEventDao implements AgentEventDao {
 
     private final Logger logger = LoggerFactory.getLogger(this.getClass());
 
-    @Autowired
-    private HbaseOperations2 hbaseTemplate;
+    private final HbaseOperations2 hbaseTemplate;
+
+    private final TableDescriptor<HbaseColumnFamily.AgentEvent> descriptor;
+
+    private final ValueMapper<AgentEventBo> valueMapper;
+
+    private final AgentIdRowKeyEncoder rowKeyEncoder = new AgentIdRowKeyEncoder();
 
     @Autowired
-    private TableNameProvider tableNameProvider;
+    public HbaseAgentEventDao(HbaseOperations2 hbaseTemplate, TableDescriptor<HbaseColumnFamily.AgentEvent> descriptor, ValueMapper<AgentEventBo> valueMapper) {
+        this.hbaseTemplate = Objects.requireNonNull(hbaseTemplate, "hbaseTemplate");
+        this.descriptor = Objects.requireNonNull(descriptor, "descriptor");
+        this.valueMapper = Objects.requireNonNull(valueMapper, "valueMapper");
+    }
 
-    @Autowired
-    private AgentEventValueMapper valueMapper;
 
     @Override
     public void insert(AgentEventBo agentEventBo) {
-        if (agentEventBo == null) {
-            throw new NullPointerException("agentEventBo must not be null");
-        }
-
+        Objects.requireNonNull(agentEventBo, "agentEventBo");
         if (logger.isDebugEnabled()) {
-            logger.debug("insert event. {}", agentEventBo.toString());
+            logger.debug("insert agent event: {}", agentEventBo.toString());
         }
+        // Assert agentId
+        CollectorUtils.checkAgentId(agentEventBo.getAgentId());
 
         final String agentId = agentEventBo.getAgentId();
         final long eventTimestamp = agentEventBo.getEventTimestamp();
@@ -69,14 +76,11 @@ public class HbaseAgentEventDao implements AgentEventDao {
         final AgentEventType eventType = agentEventBo.getEventType();
         byte[] qualifier = Bytes.toBytes(eventType.getCode());
 
-        TableName agentEventTableName = tableNameProvider.getTableName(HBaseTables.AGENT_EVENT_STR);
-        this.hbaseTemplate.put(agentEventTableName, rowKey, HBaseTables.AGENT_EVENT_CF_EVENTS, qualifier, agentEventBo, this.valueMapper);
+        TableName agentEventTableName = descriptor.getTableName();
+        this.hbaseTemplate.put(agentEventTableName, rowKey, descriptor.getColumnFamilyName(), qualifier, agentEventBo, this.valueMapper);
     }
 
     byte[] createRowKey(String agentId, long eventTimestamp) {
-        byte[] agentIdKey = BytesUtils.toBytes(agentId);
-        long reverseStartTimestamp = TimeUtils.reverseTimeMillis(eventTimestamp);
-        return RowKeyUtils.concatFixedByteAndLong(agentIdKey, HBaseTables.AGENT_NAME_MAX_LEN, reverseStartTimestamp);
+        return rowKeyEncoder.encodeRowKey(agentId, eventTimestamp);
     }
-
 }

@@ -14,40 +14,38 @@
  */
 package com.navercorp.pinpoint.test.plugin;
 
-import java.io.File;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.List;
-import java.util.Scanner;
-import java.util.Timer;
-import java.util.TimerTask;
-import java.util.regex.Pattern;
-
+import com.navercorp.pinpoint.test.plugin.util.TestLogger;
 import org.junit.runner.Description;
 import org.junit.runner.Result;
 import org.junit.runner.notification.Failure;
 import org.junit.runner.notification.RunNotifier;
 import org.junit.runners.model.Statement;
+import org.tinylog.TaggedLogger;
 
-import com.navercorp.pinpoint.common.util.SystemProperty;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
+import java.util.Scanner;
+import java.util.regex.Pattern;
 
-import static com.navercorp.pinpoint.test.plugin.PinpointPluginTestConstants.*;
+import static com.navercorp.pinpoint.test.plugin.PluginTestConstants.JUNIT_OUTPUT_DELIMITER;
 
 /**
  * @author Jongho Moon
  *
  */
 public class PinpointPluginTestStatement extends Statement {
-    private static final String JUNIT_OUTPUT_DELIMITER_REGEXP = Pattern.quote(JUNIT_OUTPUT_DELIMITER);
+    public static final String JUNIT_OUTPUT_DELIMITER_REGEXP = Pattern.quote(JUNIT_OUTPUT_DELIMITER);
+
+    private final TaggedLogger logger = TestLogger.getLogger();
 
     private final PinpointPluginTestRunner runner;
     private final RunNotifier notifier;
     private final PinpointPluginTestInstance testCase;
-    private final PinpointPluginTestContext context;
+    private final PluginTestContext context;
     private final Result result = new Result();
     
-    public PinpointPluginTestStatement(PinpointPluginTestRunner runner, RunNotifier notifier, PinpointPluginTestContext context, PinpointPluginTestInstance testCase) {
+    public PinpointPluginTestStatement(PinpointPluginTestRunner runner, RunNotifier notifier, PluginTestContext context, PinpointPluginTestInstance testCase) {
         this.runner = runner;
         this.context = context;
         this.testCase = testCase;
@@ -57,25 +55,14 @@ public class PinpointPluginTestStatement extends Statement {
     
     @Override
     public void evaluate() throws Throwable {
-        ProcessBuilder builder = new ProcessBuilder();
-
-        builder.command(buildCommand());
-        builder.redirectErrorStream(true);
-        builder.directory(testCase.getWorkingDirectory());
-        
-        System.out.println("Working directory: " + SystemProperty.INSTANCE.getProperty("user.dir"));
-        System.out.println("Command: " + builder.command());
-
         Description parentDescription = runner.getDescription();
 
-        final Process process = builder.start();
-        
         try {
-            Scanner scanner = testCase.startTest(process);
+            Scanner scanner = testCase.startTest();
 
             while (scanner.hasNextLine()) {
                 String line = scanner.nextLine();
-                if(line.endsWith("\\r")) {
+                if (line.endsWith("\\r")) {
                     line = line.substring(0, line.length() - 2);
                 }
 
@@ -88,6 +75,7 @@ public class PinpointPluginTestStatement extends Statement {
                         notifier.fireTestRunStarted(parentDescription);
                     } else if ("testRunFinished".equals(event)) {
                         notifier.fireTestRunFinished(result);
+                        break;
                     } else if ("testStarted".equals(event)) {
                         Description ofTest = findDescription(parentDescription, tokens[2]);
                         notifier.fireTestStarted(ofTest);
@@ -95,11 +83,12 @@ public class PinpointPluginTestStatement extends Statement {
                         Description ofTest = findDescription(parentDescription, tokens[2]);
                         notifier.fireTestFinished(ofTest);
                     } else if ("testFailure".equals(event)) {
-                        List<String> stackTrace = tokens.length > 5 ? Arrays.asList(tokens).subList(5, tokens.length - 1) : Collections.<String>emptyList();
+                        List<String> stackTrace = slice(tokens);
+
                         Failure failure = toFailure(parentDescription, tokens[2], tokens[3], tokens[4], stackTrace);
                         notifier.fireTestFailure(failure);
                     } else if ("testAssumptionFailure".equals(event)) {
-                        List<String> stackTrace = tokens.length > 5 ? Arrays.asList(tokens).subList(5, tokens.length - 1) : Collections.<String>emptyList();
+                        List<String> stackTrace = slice(tokens);
                         Failure failure = toFailure(parentDescription, tokens[2], tokens[3], tokens[4], stackTrace);
                         notifier.fireTestAssumptionFailed(failure);
                     } else if ("testIgnored".equals(event)) {
@@ -111,103 +100,21 @@ public class PinpointPluginTestStatement extends Statement {
                 }
             }
         } catch (Throwable t) {
-            System.err.println("Failed to execute test");
-            t.printStackTrace();
-            
+            logger.error(t, "Failed to execute test");
             throw t;
         } finally {
-            try {        
-                testCase.endTest(process);
-            } finally {
-
-                Timer timer = new Timer();
-                timer.schedule(new TimerTask() {
-
-                    @Override
-                    public void run() {
-                        process.destroy();
-                    }
-                    
-                }, 10 * 1000);
-
-                try {
-                    process.waitFor();
-                } catch (InterruptedException e) {
-                    // ignore
-                }
-                
-                timer.cancel();
-            }
+            testCase.endTest();
         }
     }
-    
-    private String[] buildCommand() {
-        List<String> list = new ArrayList<String>();
-        
-        list.add(context.getJavaExecutable());
-        
-        list.add("-cp");
-        list.add(getClassPathAsString());
-        
-        list.add(getAgent());
-        
-        list.add("-Dpinpoint.agentId=build.test.0");
-        list.add("-Dpinpoint.applicationName=test");
-        list.add("-D" + PINPOINT_TEST_ID + "=" + testCase.getTestId());
 
-        for (String arg : context.getJvmArguments()) {
-            list.add(arg);
+    static List<String> slice(String[] tokens) {
+        if (tokens.length > 5) {
+            String[] copy = Arrays.copyOfRange(tokens, 5, tokens.length - 1);
+            return Arrays.asList(copy);
         }
-        
-        if (context.isDebug()) {
-            list.addAll(getDebugOptions());
-        }
-        
-        if (context.getConfigFile() != null) {
-            list.add("-Dpinpoint.config=" + context.getConfigFile());
-        }
-        
-        for (String arg : testCase.getVmArgs()) {
-            list.add(arg);
-        }
-        
-        String mainClass = testCase.getMainClass();
-        
-        if (mainClass.endsWith(".jar")) {
-            list.add("-jar");
-        }
-        
-        list.add(mainClass);
-        list.addAll(testCase.getAppArgs());
+        return Collections.emptyList();
+    }
 
-        return list.toArray(new String[0]);
-    }
-    
-    private List<String> getDebugOptions() {
-        return Arrays.asList("-Xdebug", "-agentlib:jdwp=transport=dt_socket,address=1296,server=y,suspend=y");
-    }
-    
-    private String getAgent() {
-        return "-javaagent:" + context.getAgentJar() + "=AGENT_TYPE=PLUGIN_TEST";
-    }
-    
-    private String getClassPathAsString() {
-        StringBuilder classPath = new StringBuilder();
-        boolean first = true;
-        
-        for (String lib : testCase.getClassPath()) {
-            if (first) {
-                first = false;
-            } else {
-                classPath.append(File.pathSeparatorChar);
-            }
-            
-            classPath.append(lib);
-        }
-        
-        return classPath.toString();
-    }
-    
     private Description findDescription(Description parentDescription, String displayName) {
         if (displayName.equals(parentDescription.getDisplayName())) {
             return parentDescription;
@@ -231,29 +138,10 @@ public class PinpointPluginTestStatement extends Statement {
         
         return failure;
     }
-    
-    private PinpointPluginTestException toException(String message, String exceptionClass, List<String> traceInText) {
-        StackTraceElement[] stackTrace = new StackTraceElement[traceInText.size()];
-        
-        for (int i = 0; i < traceInText.size(); i++) {
-            String trace = traceInText.get(i);
 
-            if (trace.equals("$CAUSE$")) {
-                PinpointPluginTestException cause = toException(traceInText.get(i + 2), traceInText.get(i + 1), traceInText.subList(i + 3, traceInText.size()));
-                return new PinpointPluginTestException(exceptionClass + ": " + message, Arrays.copyOf(stackTrace, i), cause);
-            }
-            
-            String[] tokens = trace.split(",");
-            
-            if (tokens.length != 4) {
-                System.out.println("Unexpected trace string: " + trace);
-                stackTrace[i] = new StackTraceElement(trace, "", null, -1);
-            } else {
-                stackTrace[i] = new StackTraceElement(tokens[0], tokens[1], tokens[2], Integer.parseInt(tokens[3]));
-            }
-            
-        }
-        
-        return new PinpointPluginTestException(exceptionClass + ": " + message, stackTrace);
+    private final ExceptionReader reader = new ExceptionReader();
+
+    private Exception toException(String message, String exceptionClass, List<String> traceInText) {
+        return reader.read(exceptionClass, message, traceInText);
     }
 }

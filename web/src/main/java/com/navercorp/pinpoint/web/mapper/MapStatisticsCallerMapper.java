@@ -20,7 +20,7 @@ import com.navercorp.pinpoint.common.buffer.Buffer;
 import com.navercorp.pinpoint.common.buffer.FixedBuffer;
 import com.navercorp.pinpoint.common.buffer.OffsetFixedBuffer;
 import com.navercorp.pinpoint.common.hbase.RowMapper;
-import com.navercorp.pinpoint.common.service.ServiceTypeRegistryService;
+import com.navercorp.pinpoint.loader.service.ServiceTypeRegistryService;
 import com.navercorp.pinpoint.common.util.TimeUtils;
 import com.navercorp.pinpoint.web.applicationmap.rawdata.LinkDataMap;
 import com.navercorp.pinpoint.web.service.ApplicationFactory;
@@ -35,6 +35,8 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
+
+import java.util.Objects;
 
 /**
  * rowkey = caller col = callee
@@ -59,14 +61,11 @@ public class MapStatisticsCallerMapper implements RowMapper<LinkDataMap> {
     private RowKeyDistributorByHashPrefix rowKeyDistributorByHashPrefix;
 
     public MapStatisticsCallerMapper() {
-        this(SkipLinkFilter.FILTER);
+        this(LinkFilter::skip);
     }
 
     public MapStatisticsCallerMapper(LinkFilter filter) {
-        if (filter == null) {
-            throw new NullPointerException("filter must not be null");
-        }
-        this.filter = filter;
+        this.filter = Objects.requireNonNull(filter, "filter");
     }
 
     @Override

@@ -16,124 +16,80 @@
 
 package com.navercorp.pinpoint.common.server.bo;
 
-import com.navercorp.pinpoint.common.PinpointConstants;
-import com.navercorp.pinpoint.common.util.BytesUtils;
-import com.navercorp.pinpoint.common.server.util.RowKeyUtils;
-import com.navercorp.pinpoint.common.util.TimeUtils;
+import com.navercorp.pinpoint.common.server.bo.serializer.metadata.MetaDataRowKey;
+import com.navercorp.pinpoint.common.util.LineNumber;
+
+import java.util.Objects;
 
 /**
  * @author emeroad
  * @author jaehong.kim
  */
-public class ApiMetaDataBo {
-    private String agentId;
-    private long startTime;
+public class ApiMetaDataBo implements MetaDataRowKey {
+    private final String agentId;
+    private final long startTime;
+    private final int apiId;
 
-    private int apiId;
+    private final String apiInfo;
+    private final int lineNumber;
+    private final MethodTypeEnum methodTypeEnum;
 
-    private String apiInfo;
-    private int lineNumber;
-    private MethodTypeEnum methodTypeEnum = MethodTypeEnum.DEFAULT;
-
-    public ApiMetaDataBo() {
-    }
-
-    public ApiMetaDataBo(String agentId, long startTime, int apiId) {
-        if (agentId == null) {
-            throw new NullPointerException("agentId must not be null");
-        }
-
-        this.agentId = agentId;
+    public ApiMetaDataBo(String agentId, long startTime, int apiId, int lineNumber,
+                         MethodTypeEnum methodTypeEnum, String apiInfo) {
+        this.agentId = Objects.requireNonNull(agentId, "agentId");
         this.startTime = startTime;
         this.apiId = apiId;
+        this.lineNumber = lineNumber;
+        this.apiInfo = apiInfo;
+        this.methodTypeEnum = Objects.requireNonNull(methodTypeEnum, "methodTypeEnum");
     }
 
+    @Override
     public String getAgentId() {
         return agentId;
     }
 
-    public void setAgentId(String agentId) {
-        this.agentId = agentId;
-    }
-
-    public int getApiId() {
-        return apiId;
-    }
-
-    public void setApiId(int apiId) {
-        this.apiId = apiId;
-    }
-
-
-    public long getStartTime() {
+    @Override
+    public long getAgentStartTime() {
         return startTime;
     }
 
-    public void setStartTime(long startTime) {
-        this.startTime = startTime;
+    @Override
+    public int getId() {
+        return apiId;
     }
 
     public String getApiInfo() {
         return apiInfo;
     }
 
-    public void setApiInfo(String apiInfo) {
-        this.apiInfo = apiInfo;
-    }
-
     public int getLineNumber() {
         return lineNumber;
     }
 
-    public void setLineNumber(int lineNumber) {
-        this.lineNumber = lineNumber;
-    }
-    
     public MethodTypeEnum getMethodTypeEnum() {
         return methodTypeEnum;
     }
 
-    public void setMethodTypeEnum(MethodTypeEnum methodTypeEnum) {
-        if (methodTypeEnum == null) {
-            throw new NullPointerException("methodTypeEnum must not be null");
-        }
-        this.methodTypeEnum = methodTypeEnum;
-    }
-    
     public String getDescription() {
-        if (lineNumber != -1) {
+        if (LineNumber.isLineNumber(lineNumber)) {
             return apiInfo + ":" + lineNumber;
         }
         
         return apiInfo;
     }
 
-    public void readRowKey(byte[] bytes) {
-        this.agentId = BytesUtils.safeTrim(BytesUtils.toString(bytes, 0, PinpointConstants.AGENT_NAME_MAX_LEN));
-        this.startTime = TimeUtils.recoveryTimeMillis(readTime(bytes));
-        this.apiId = readKeyCode(bytes);
-    }
-
-    private static long readTime(byte[] rowKey) {
-        return BytesUtils.bytesToLong(rowKey, PinpointConstants.AGENT_NAME_MAX_LEN);
-    }
-
-    private static int readKeyCode(byte[] rowKey) {
-        return BytesUtils.bytesToInt(rowKey, PinpointConstants.AGENT_NAME_MAX_LEN + BytesUtils.LONG_BYTE_LENGTH);
-    }
-
-    public byte[] toRowKey() {
-        return RowKeyUtils.getMetaInfoRowKey(this.agentId, this.startTime, this.apiId);
-    }
 
     @Override
     public String toString() {
-        return "ApiMetaDataBo{" +
-                "agentId='" + agentId + '\'' +
-                ", apiId=" + apiId +
-                ", startTime=" + startTime +
-                ", apiInfo='" + apiInfo + '\'' +
-                ", lineNumber=" + lineNumber +
-                '}';
+        final StringBuilder sb = new StringBuilder("ApiMetaDataBo{");
+        sb.append("agentId='").append(agentId).append('\'');
+        sb.append(", startTime=").append(startTime);
+        sb.append(", apiId=").append(apiId);
+        sb.append(", apiInfo='").append(apiInfo).append('\'');
+        sb.append(", lineNumber=").append(lineNumber);
+        sb.append(", methodTypeEnum=").append(methodTypeEnum);
+        sb.append('}');
+        return sb.toString();
     }
 }

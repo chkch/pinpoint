@@ -16,20 +16,21 @@
 package com.navercorp.pinpoint.web.dao.hbase;
 
 import com.navercorp.pinpoint.common.server.bo.codec.stat.join.DataSourceDecoder;
+import com.navercorp.pinpoint.common.server.bo.stat.join.JoinDataSourceListBo;
 import com.navercorp.pinpoint.common.server.bo.stat.join.StatType;
 import com.navercorp.pinpoint.web.dao.ApplicationDataSourceDao;
 import com.navercorp.pinpoint.web.mapper.stat.ApplicationStatMapper;
 import com.navercorp.pinpoint.web.mapper.stat.SampledApplicationStatResultExtractor;
-import com.navercorp.pinpoint.web.mapper.stat.sampling.sampler.JoinDataSourceSampler;
+import com.navercorp.pinpoint.web.mapper.stat.sampling.sampler.ApplicationStatSampler;
 import com.navercorp.pinpoint.web.util.TimeWindow;
 import com.navercorp.pinpoint.web.vo.Range;
 import com.navercorp.pinpoint.web.vo.stat.AggreJoinDataSourceListBo;
 import com.navercorp.pinpoint.web.vo.stat.AggregationStatData;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Repository;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 
 /**
  * @author minwoo.jung
@@ -37,20 +38,24 @@ import java.util.List;
 @Repository
 public class HbaseApplicationDataSourceDao implements ApplicationDataSourceDao {
 
-    @Autowired
-    private DataSourceDecoder dataSourceDecoder;
+    private final DataSourceDecoder dataSourceDecoder;
 
-    @Autowired
-    private JoinDataSourceSampler dataSourceSampler;
+    private final ApplicationStatSampler<JoinDataSourceListBo> dataSourceSampler;
 
-    @Autowired
-    private HbaseApplicationStatDaoOperations operations;
+    private final HbaseApplicationStatDaoOperations operations;
+
+    public HbaseApplicationDataSourceDao(DataSourceDecoder dataSourceDecoder,
+                                         ApplicationStatSampler<JoinDataSourceListBo> dataSourceSampler, HbaseApplicationStatDaoOperations operations) {
+        this.dataSourceDecoder = Objects.requireNonNull(dataSourceDecoder, "dataSourceDecoder");
+        this.dataSourceSampler = Objects.requireNonNull(dataSourceSampler, "dataSourceSampler");
+        this.operations = Objects.requireNonNull(operations, "operations");
+    }
 
     @Override
     public List<AggreJoinDataSourceListBo> getApplicationStatList(String applicationId, TimeWindow timeWindow) {
         long scanFrom = timeWindow.getWindowRange().getFrom();
         long scanTo = timeWindow.getWindowRange().getTo() + timeWindow.getWindowSlotSize();
-        Range range = new Range(scanFrom, scanTo);
+        Range range = Range.newRange(scanFrom, scanTo);
         ApplicationStatMapper mapper = operations.createRowMapper(dataSourceDecoder, range);
         SampledApplicationStatResultExtractor resultExtractor = new SampledApplicationStatResultExtractor(timeWindow, mapper, dataSourceSampler);
         List<AggregationStatData> aggregationStatDataList = operations.getSampledStatList(StatType.APP_DATA_SOURCE, resultExtractor, applicationId, range);

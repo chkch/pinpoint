@@ -17,8 +17,10 @@
 package com.navercorp.pinpoint.profiler.receiver.service;
 
 import com.navercorp.pinpoint.common.annotations.VisibleForTesting;
-import com.navercorp.pinpoint.common.util.Assert;
+import java.util.Objects;
 import com.navercorp.pinpoint.common.util.CollectionUtils;
+import com.navercorp.pinpoint.grpc.trace.PCmdActiveThreadDump;
+import com.navercorp.pinpoint.grpc.trace.PCmdActiveThreadLightDump;
 import com.navercorp.pinpoint.thrift.dto.command.TCmdActiveThreadDump;
 import com.navercorp.pinpoint.thrift.dto.command.TCmdActiveThreadLightDump;
 
@@ -46,7 +48,7 @@ public class ThreadDumpRequest {
 
 
     public static ThreadDumpRequest create(TCmdActiveThreadDump request) {
-        Assert.requireNonNull(request, "request must not be null");
+        Objects.requireNonNull(request, "request");
 
         final int limit = getLimit(request.getLimit());
 
@@ -57,7 +59,29 @@ public class ThreadDumpRequest {
     }
 
     public static ThreadDumpRequest create(TCmdActiveThreadLightDump request) {
-        Assert.requireNonNull(request, "request must not be null");
+        Objects.requireNonNull(request, "request");
+
+        int limit = getLimit(request.getLimit());
+
+        final List<Long> localTransactionIdList = request.getLocalTraceIdList();
+        final List<String> threadNameList = request.getThreadNameList();
+
+        return new ThreadDumpRequest(StackTrace.SKIP, limit, localTransactionIdList, threadNameList);
+    }
+
+    public static ThreadDumpRequest create(PCmdActiveThreadDump request) {
+        Objects.requireNonNull(request, "request");
+
+        int limit = getLimit(request.getLimit());
+
+        final List<Long> localTransactionIdList = request.getLocalTraceIdList();
+        final List<String> threadNameList = request.getThreadNameList();
+
+        return new ThreadDumpRequest(StackTrace.DUMP, limit, localTransactionIdList, threadNameList);
+    }
+
+    public static ThreadDumpRequest create(PCmdActiveThreadLightDump request) {
+        Objects.requireNonNull(request, "request");
 
         int limit = getLimit(request.getLimit());
 
@@ -68,7 +92,7 @@ public class ThreadDumpRequest {
     }
 
     ThreadDumpRequest(StackTrace stackTrace, int limit, List<Long> localTransactionIdList, List<String> threadNameList) {
-        this.stackTrace = Assert.requireNonNull(stackTrace, "stackTrace must not be null");
+        this.stackTrace = Objects.requireNonNull(stackTrace, "stackTrace");
         this.limit = limit;
 
         this.localTransactionIdSet = newHashSet(localTransactionIdList);

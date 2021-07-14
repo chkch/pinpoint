@@ -51,6 +51,8 @@ public enum StreamCode {
     CONNECTION_TIMEOUT((short) 152),
     CONNECTION_UNSUPPORT((short) 153),
 
+    CONNECTION_DUPLICATED((short) 154),
+
     ROUTE_ERROR((short)160);
 
     private final short value;
@@ -58,6 +60,13 @@ public enum StreamCode {
 
     StreamCode(short value) {
         this.value = value;
+    }
+
+    public static boolean isConnectionError(StreamCode streamCode) {
+        if (CONNECTION_ERRROR == streamCode || CONNECTION_NOT_FOUND == streamCode || CONNECTION_TIMEOUT == streamCode || CONNECTION_UNSUPPORT == streamCode) {
+            return true;
+        }
+        return false;
     }
 
     public static StreamCode getCode(short value) {

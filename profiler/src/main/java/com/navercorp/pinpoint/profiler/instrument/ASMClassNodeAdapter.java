@@ -15,9 +15,14 @@
  */
 package com.navercorp.pinpoint.profiler.instrument;
 
-import com.navercorp.pinpoint.bootstrap.instrument.InstrumentContext;
+import com.navercorp.pinpoint.bootstrap.instrument.ClassInputStreamProvider;
+import java.util.Objects;
 import com.navercorp.pinpoint.common.util.CollectionUtils;
+import com.navercorp.pinpoint.common.util.IOUtils;
+import com.navercorp.pinpoint.profiler.instrument.scanner.ClassScannerFactory;
+import com.navercorp.pinpoint.profiler.instrument.scanner.Scanner;
 import com.navercorp.pinpoint.profiler.util.JavaAssistUtils;
+import com.navercorp.pinpoint.profiler.util.StringMatchUtils;
 import org.objectweb.asm.ClassReader;
 import org.objectweb.asm.ClassWriter;
 import org.objectweb.asm.Opcodes;
@@ -31,9 +36,12 @@ import org.objectweb.asm.tree.InsnList;
 import org.objectweb.asm.tree.InsnNode;
 import org.objectweb.asm.tree.MethodNode;
 import org.objectweb.asm.tree.VarInsnNode;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.security.ProtectionDomain;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -43,64 +51,97 @@ import java.util.List;
  */
 public class ASMClassNodeAdapter {
 
-    public static ASMClassNodeAdapter get(final InstrumentContext pluginContext, final ClassLoader classLoader, final String classInternalName) {
-        return get(pluginContext, classLoader, classInternalName, false);
+    private static final Logger logger = LoggerFactory.getLogger(ASMClassNodeAdapter.class);
+
+    public static ASMClassNodeAdapter get(final ClassInputStreamProvider pluginClassInputStreamProvider, final ClassLoader classLoader, ProtectionDomain protectionDomain, final String classInternalName) {
+        return get(pluginClassInputStreamProvider, classLoader, protectionDomain, classInternalName, false);
     }
 
-    public static ASMClassNodeAdapter get(final InstrumentContext pluginContext, final ClassLoader classLoader, final String classInternalName, final boolean skipCode) {
-        if (pluginContext == null) {
-            throw new NullPointerException("pluginContext must not be null");
-        }
-        if (classInternalName == null) {
-            throw new NullPointerException("classInternalName must not be null");
-        }
+    public static ASMClassNodeAdapter get(final ClassInputStreamProvider pluginClassInputStreamProvider, final ClassLoader classLoader, ProtectionDomain protectionDomain, final String classInternalName, final boolean skipCode) {
+        Objects.requireNonNull(pluginClassInputStreamProvider, "pluginInputStreamProvider");
+        Objects.requireNonNull(classInternalName, "classInternalName");
 
-        InputStream in = null;
-        try {
-            in = pluginContext.getResourceAsStream(classLoader, classInternalName + ".class");
-            if (in != null) {
-                final ClassReader classReader = new ClassReader(in);
-                final ClassNode classNode = new ClassNode();
-                if (skipCode) {
-                    classReader.accept(classNode, ClassReader.SKIP_CODE);
-                } else {
-                    classReader.accept(classNode, 0);
+        final String classPath = classInternalName.concat(".class");
+        final byte[] bytes = readStream(classPath, pluginClassInputStreamProvider, protectionDomain, classLoader);
+        if (bytes == null) {
+            return null;
+        }
+        final ClassReader classReader = new ClassReader(bytes);
+        final ClassNode classNode = new ClassNode();
+
+        final int parsingOptions = getParsingOption(skipCode);
+        classReader.accept(classNode, parsingOptions);
+
+        return new ASMClassNodeAdapter(pluginClassInputStreamProvider, classLoader, protectionDomain, classNode, skipCode);
+    }
+
+    private static int getParsingOption(boolean skipCode) {
+        if (skipCode) {
+            return ClassReader.SKIP_CODE;
+        } else {
+            return 0;
+        }
+    }
+
+    private static byte[] readStream(String classPath, ClassInputStreamProvider pluginClassInputStreamProvider, ProtectionDomain protectionDomain, ClassLoader classLoader) {
+
+        final Scanner scanner = ClassScannerFactory.newScanner(protectionDomain);
+        if (scanner != null) {
+            try {
+                final InputStream stream = scanner.openStream(classPath);
+                if (stream != null) {
+                    try {
+                        return IOUtils.toByteArray(stream);
+                    } catch (IOException e) {
+                        logger.warn("bytecode read fail scanner:{} path:{}", scanner, classPath);
+                        return null;
+                    }
                 }
-
-                return new ASMClassNodeAdapter(pluginContext, classLoader, classNode, skipCode);
-            }
-        } catch (IOException ignored) {
-            // not found class.
-        } finally {
-            if (in != null) {
-                try {
-                    in.close();
-                } catch (IOException ignored) {
-                }
+            } finally {
+                scanner.close();
             }
         }
 
+        final InputStream in = pluginClassInputStreamProvider.getResourceAsStream(classLoader, classPath);
+        if (in != null) {
+            try {
+                return IOUtils.toByteArray(in);
+            } catch (IOException e) {
+                logger.warn("bytecode read fail path:{}", classPath);
+                return null;
+            }
+        }
         return null;
     }
 
-    private final InstrumentContext pluginContext;
+    private final ClassInputStreamProvider pluginInputStreamProvider;
     private final ClassLoader classLoader;
+    private final ProtectionDomain protectionDomain;
     private final ClassNode classNode;
     private final boolean skipCode;
 
-    public ASMClassNodeAdapter(final InstrumentContext pluginContext, final ClassLoader classLoader, final ClassNode classNode) {
-        this(pluginContext, classLoader, classNode, false);
+    public ASMClassNodeAdapter(final ClassInputStreamProvider pluginInputStreamProvider, final ClassLoader classLoader, ProtectionDomain protectionDomain, final ClassNode classNode) {
+        this(pluginInputStreamProvider, classLoader, protectionDomain, classNode, false);
     }
 
-    public ASMClassNodeAdapter(final InstrumentContext pluginContext, final ClassLoader classLoader, final ClassNode classNode, final boolean skipCode) {
-        this.pluginContext = pluginContext;
+    public ASMClassNodeAdapter(final ClassInputStreamProvider pluginInputStreamProvider, final ClassLoader classLoader, ProtectionDomain protectionDomain, final ClassNode classNode, final boolean skipCode) {
+        this.pluginInputStreamProvider = pluginInputStreamProvider;
         this.classLoader = classLoader;
+        this.protectionDomain = protectionDomain;
         this.classNode = classNode;
         this.skipCode = skipCode;
     }
 
     public String getInternalName() {
         return this.classNode.name;
+    }
+
+    public ClassLoader getClassLoader() {
+        return classLoader;
+    }
+
+    public ProtectionDomain getProtectionDomain() {
+        return protectionDomain;
     }
 
     public String getName() {
@@ -129,7 +170,7 @@ public class ASMClassNodeAdapter {
             return new String[0];
         }
 
-        final List<String> list = new ArrayList<String>();
+        final List<String> list = new ArrayList<>(interfaces.size());
         for (String name : interfaces) {
             if (name != null) {
                 list.add(JavaAssistUtils.jvmNameToJavaName(name));
@@ -147,26 +188,32 @@ public class ASMClassNodeAdapter {
         return findDeclaredMethod(methodName, desc);
     }
 
+    public List<ASMMethodNodeAdapter> getDeclaredConstructors() {
+        if (this.skipCode) {
+            throw new IllegalStateException("not supported operation, skipCode option is true.");
+        }
+
+        return findDeclaredMethod("<init>");
+    }
+
     public boolean hasDeclaredMethod(final String methodName, final String desc) {
         return findDeclaredMethod(methodName, desc) != null;
     }
 
     private ASMMethodNodeAdapter findDeclaredMethod(final String methodName, final String desc) {
-        if (methodName == null) {
-            return null;
-        }
+        Objects.requireNonNull(methodName, "methodName");
 
         final List<MethodNode> declaredMethods = classNode.methods;
-        if (declaredMethods == null) {
+        if (CollectionUtils.isEmpty(declaredMethods)) {
             return null;
         }
 
         for (MethodNode methodNode : declaredMethods) {
-            if (methodNode.name == null || !methodNode.name.equals(methodName)) {
+            if (!StringMatchUtils.equals(methodNode.name, methodName)) {
                 continue;
             }
 
-            if (desc == null || (methodNode.desc != null && methodNode.desc.startsWith(desc))) {
+            if (desc == null || StringMatchUtils.startWith(methodNode.desc, desc)) {
                 return new ASMMethodNodeAdapter(getInternalName(), methodNode);
             }
         }
@@ -174,18 +221,40 @@ public class ASMClassNodeAdapter {
         return null;
     }
 
+    private List<ASMMethodNodeAdapter> findDeclaredMethod(final String methodName) {
+        Objects.requireNonNull(methodName, "methodName");
+
+        final List<MethodNode> declaredMethods = classNode.methods;
+        if (CollectionUtils.isEmpty(declaredMethods)) {
+            return Collections.emptyList();
+        }
+
+        final List<ASMMethodNodeAdapter> methodNodes = new ArrayList<>();
+        for (MethodNode methodNode : declaredMethods) {
+            if (!StringMatchUtils.equals(methodNode.name, methodName)) {
+                continue;
+            }
+
+            methodNodes.add(new ASMMethodNodeAdapter(getInternalName(), methodNode));
+        }
+        return methodNodes;
+    }
+
+
     public List<ASMMethodNodeAdapter> getDeclaredMethods() {
         if (this.skipCode) {
             throw new IllegalStateException("not supported operation, skipCode option is true.");
         }
 
-        final List<ASMMethodNodeAdapter> methodNodes = new ArrayList<ASMMethodNodeAdapter>();
-        if (this.classNode.methods == null) {
-            return methodNodes;
+        final List<MethodNode> methods = this.classNode.methods;
+        if (CollectionUtils.isEmpty(methods)) {
+            return Collections.emptyList();
         }
 
-        for (MethodNode methodNode : this.classNode.methods) {
-            if (methodNode.name == null || methodNode.name.equals("<init>") || methodNode.name.equals("<clinit>")) {
+        final List<ASMMethodNodeAdapter> methodNodes = new ArrayList<>(methods.size());
+        for (MethodNode methodNode : methods) {
+            final String methodName = methodNode.name;
+            if (methodName == null || methodName.equals("<init>") || methodName.equals("<clinit>")) {
                 // skip constructor(<init>) and static initializer block(<clinit>)
                 continue;
             }
@@ -200,7 +269,10 @@ public class ASMClassNodeAdapter {
             return false;
         }
 
-        if (desc == null || (this.classNode.outerMethodDesc != null && this.classNode.outerMethodDesc.startsWith(desc))) {
+        if (desc == null) {
+            return true;
+        }
+        if (StringMatchUtils.startWith(this.classNode.outerMethodDesc, desc)) {
             return true;
         }
 
@@ -214,7 +286,7 @@ public class ASMClassNodeAdapter {
 
         if (this.classNode.superName != null) {
             // skip code.
-            final ASMClassNodeAdapter classNode = ASMClassNodeAdapter.get(this.pluginContext, this.classLoader, this.classNode.superName, true);
+            final ASMClassNodeAdapter classNode = ASMClassNodeAdapter.get(this.pluginInputStreamProvider, this.classLoader, this.protectionDomain, this.classNode.superName, true);
             if (classNode != null) {
                 return classNode.hasMethod(methodName, desc);
             }
@@ -224,26 +296,29 @@ public class ASMClassNodeAdapter {
     }
 
     public ASMFieldNodeAdapter getField(final String fieldName, final String fieldDesc) {
-        if (fieldName == null || this.classNode.fields == null) {
+        Objects.requireNonNull(fieldName, "fieldName");
+
+        if (this.classNode.fields == null) {
             return null;
         }
 
         final List<FieldNode> fields = this.classNode.fields;
         for (FieldNode fieldNode : fields) {
-            if ((fieldNode.name != null && fieldNode.name.equals(fieldName)) && (fieldDesc == null || (fieldNode.desc != null && fieldNode.desc.equals(fieldDesc)))) {
+            if (StringMatchUtils.equals(fieldNode.name, fieldName) && (fieldDesc == null || (StringMatchUtils.equals(fieldNode.desc, fieldDesc)))) {
                 return new ASMFieldNodeAdapter(fieldNode);
             }
         }
 
+
         // find interface.
         final List<String> interfaces = this.classNode.interfaces;
-        if (interfaces != null && interfaces.size() > 0) {
+        if (CollectionUtils.hasLength(interfaces)) {
             for (String interfaceClassName : interfaces) {
                 if (interfaceClassName == null) {
                     continue;
                 }
 
-                final ASMClassNodeAdapter classNodeAdapter = ASMClassNodeAdapter.get(this.pluginContext, this.classLoader, interfaceClassName, true);
+                final ASMClassNodeAdapter classNodeAdapter = ASMClassNodeAdapter.get(this.pluginInputStreamProvider, this.classLoader, this.protectionDomain, interfaceClassName, true);
                 if (classNodeAdapter != null) {
                     final ASMFieldNodeAdapter fieldNode = classNodeAdapter.getField(fieldName, fieldDesc);
                     if (fieldNode != null) {
@@ -255,7 +330,7 @@ public class ASMClassNodeAdapter {
 
         // find super class.
         if (this.classNode.superName != null) {
-            final ASMClassNodeAdapter classNodeAdapter = ASMClassNodeAdapter.get(this.pluginContext, this.classLoader, this.classNode.superName, true);
+            final ASMClassNodeAdapter classNodeAdapter = ASMClassNodeAdapter.get(this.pluginInputStreamProvider, this.classLoader, this.protectionDomain, this.classNode.superName, true);
             if (classNodeAdapter != null) {
                 final ASMFieldNodeAdapter fieldNode = classNodeAdapter.getField(fieldName, fieldDesc);
                 if (fieldNode != null) {
@@ -267,53 +342,57 @@ public class ASMClassNodeAdapter {
         return null;
     }
 
-    public ASMFieldNodeAdapter addField(final String fieldName, final Class<?> fieldClass) {
-        if (fieldName == null || fieldClass == null) {
-            throw new IllegalArgumentException("fieldNode name or fieldNode class must not be null.");
-        }
-
-        final Type type = Type.getType(fieldClass);
-        final FieldNode fieldNode = new FieldNode(Opcodes.ACC_PRIVATE, fieldName, type.getDescriptor(), null, null);
-        if (this.classNode.fields == null) {
-            this.classNode.fields = new ArrayList<FieldNode>();
-        }
-        this.classNode.fields.add(fieldNode);
+    public ASMFieldNodeAdapter addField(final String fieldName, final String fieldDesc) {
+        Objects.requireNonNull(fieldName, "fieldName");
+        Objects.requireNonNull(fieldDesc, "fieldDesc");
+        final FieldNode fieldNode = new FieldNode(getFieldAccessFlags(), fieldName, fieldDesc, null, null);
+        addFieldNode0(fieldNode);
 
         return new ASMFieldNodeAdapter(fieldNode);
     }
 
+    private int getFieldAccessFlags() {
+        // Field added by pinpoint must not be serialized
+        return Opcodes.ACC_PRIVATE | Opcodes.ACC_TRANSIENT;
+    }
+
+    private void addFieldNode0(FieldNode fieldNode) {
+        if (this.classNode.fields == null) {
+            this.classNode.fields = new ArrayList<>();
+        }
+        this.classNode.fields.add(fieldNode);
+    }
+
     public ASMMethodNodeAdapter addDelegatorMethod(final ASMMethodNodeAdapter superMethodNode) {
-        if (superMethodNode == null) {
-            throw new IllegalArgumentException("super method annotation must not be null.");
-        }
+        Objects.requireNonNull(superMethodNode, "superMethodNode");
 
-        String[] exceptions = null;
-        if (superMethodNode.getExceptions() != null) {
-            exceptions = superMethodNode.getExceptions().toArray(new String[0]);
-        }
+        final String[] exceptions = getSuperMethodExceptions(superMethodNode);
 
-        final ASMMethodNodeAdapter methodNode = new ASMMethodNodeAdapter(getInternalName(), new MethodNode(superMethodNode.getAccess(), superMethodNode.getName(), superMethodNode.getDesc(), superMethodNode.getSignature(), exceptions));
+        final MethodNode rawMethodNode = new MethodNode(superMethodNode.getAccess(), superMethodNode.getName(), superMethodNode.getDesc(), superMethodNode.getSignature(), exceptions);
+        final ASMMethodNodeAdapter methodNode = new ASMMethodNodeAdapter(getInternalName(), rawMethodNode);
         methodNode.addDelegator(superMethodNode.getDeclaringClassInternalName());
-        if (this.classNode.methods == null) {
-            this.classNode.methods = new ArrayList<MethodNode>();
-        }
-        this.classNode.methods.add(methodNode.getMethodNode());
+        addMethodNode0(methodNode.getMethodNode());
 
         return methodNode;
     }
 
-    public void addGetterMethod(final String methodName, final ASMFieldNodeAdapter fieldNode) {
-        if (methodName == null || fieldNode == null) {
-            throw new IllegalArgumentException("method name or fieldNode annotation must not be null.");
+    private String[] getSuperMethodExceptions(ASMMethodNodeAdapter superMethodNode) {
+        final List<String> superMethodNodeExceptions = superMethodNode.getExceptions();
+        if (superMethodNodeExceptions == null) {
+            return null;
         }
+        return superMethodNodeExceptions.toArray(new String[0]);
+    }
+
+    public void addGetterMethod(final String methodName, final ASMFieldNodeAdapter fieldNode) {
+        Objects.requireNonNull(methodName, "methodName");
+        Objects.requireNonNull(fieldNode, "fieldNode");
+
 
         // no argument is ().
         final String desc = "()" + fieldNode.getDesc();
         final MethodNode methodNode = new MethodNode(Opcodes.ACC_PUBLIC, methodName, desc, null, null);
-        if (methodNode.instructions == null) {
-            methodNode.instructions = new InsnList();
-        }
-        final InsnList instructions = methodNode.instructions;
+        final InsnList instructions = getInsnList(methodNode);
         // load this.
         instructions.add(new VarInsnNode(Opcodes.ALOAD, 0));
         // get fieldNode.
@@ -322,24 +401,25 @@ public class ASMClassNodeAdapter {
         final Type type = Type.getType(fieldNode.getDesc());
         instructions.add(new InsnNode(type.getOpcode(Opcodes.IRETURN)));
 
+        addMethodNode0(methodNode);
+    }
+
+    private void addMethodNode0(MethodNode methodNode) {
         if (this.classNode.methods == null) {
-            this.classNode.methods = new ArrayList<MethodNode>();
+            this.classNode.methods = new ArrayList<>();
         }
         this.classNode.methods.add(methodNode);
     }
 
     public void addSetterMethod(final String methodName, final ASMFieldNodeAdapter fieldNode) {
-        if (methodName == null || fieldNode == null) {
-            throw new IllegalArgumentException("method name or fieldNode annotation must not be null.");
-        }
+        Objects.requireNonNull(methodName, "methodName");
+        Objects.requireNonNull(fieldNode, "fieldNode");
+
 
         // void is V.
         final String desc = "(" + fieldNode.getDesc() + ")V";
         final MethodNode methodNode = new MethodNode(Opcodes.ACC_PUBLIC, methodName, desc, null, null);
-        if (methodNode.instructions == null) {
-            methodNode.instructions = new InsnList();
-        }
-        final InsnList instructions = methodNode.instructions;
+        final InsnList instructions = getInsnList(methodNode);
         // load this.
         instructions.add(new VarInsnNode(Opcodes.ALOAD, 0));
         final Type type = Type.getType(fieldNode.getDesc());
@@ -349,27 +429,27 @@ public class ASMClassNodeAdapter {
         // return.
         instructions.add(new InsnNode(Opcodes.RETURN));
 
-        if (this.classNode.methods == null) {
-            this.classNode.methods = new ArrayList<MethodNode>();
+        addMethodNode0(methodNode);
+    }
+
+    private InsnList getInsnList(MethodNode methodNode) {
+        if (methodNode.instructions == null) {
+            methodNode.instructions = new InsnList();
         }
-        this.classNode.methods.add(methodNode);
+        return methodNode.instructions;
     }
 
     public void addInterface(final String interfaceName) {
-        if (interfaceName == null) {
-            throw new IllegalArgumentException("interface name must not be null.");
-        }
+        Objects.requireNonNull(interfaceName, "interfaceName");
 
         if (this.classNode.interfaces == null) {
-            this.classNode.interfaces = new ArrayList<String>();
+            this.classNode.interfaces = new ArrayList<>();
         }
         this.classNode.interfaces.add(JavaAssistUtils.javaNameToJvmName(interfaceName));
     }
 
     public void copyMethod(final ASMMethodNodeAdapter methodNode) {
-        if (methodNode == null) {
-            throw new IllegalArgumentException("method annotation must not be null");
-        }
+        Objects.requireNonNull(methodNode, "methodNode");
 
         // change local call.
         final ASMMethodInsnNodeRemapper.Builder remapBuilder = new ASMMethodInsnNodeRemapper.Builder();
@@ -381,10 +461,7 @@ public class ASMClassNodeAdapter {
         // remap desc of this.
         methodNode.remapLocalVariables("this", Type.getObjectType(this.classNode.name).getDescriptor());
 
-        if (this.classNode.methods == null) {
-            this.classNode.methods = new ArrayList<MethodNode>();
-        }
-        this.classNode.methods.add(methodNode.getMethodNode());
+        addMethodNode0(methodNode.getMethodNode());
     }
 
     public boolean hasAnnotation(final Class<?> annotationClass) {
@@ -397,12 +474,15 @@ public class ASMClassNodeAdapter {
     }
 
     private boolean hasAnnotation(final String annotationClassDesc, final List<AnnotationNode> annotationNodes) {
-        if (annotationClassDesc == null || annotationNodes == null) {
+        if (annotationClassDesc == null) {
+            return false;
+        }
+        if (annotationNodes == null) {
             return false;
         }
 
         for (AnnotationNode annotation : annotationNodes) {
-            if (annotation.desc != null && annotation.desc.equals(annotationClassDesc)) {
+            if (StringMatchUtils.equals(annotation.desc, annotationClassDesc)) {
                 return true;
             }
         }
@@ -433,7 +513,7 @@ public class ASMClassNodeAdapter {
             }
 
             // skip code.
-            classNode = ASMClassNodeAdapter.get(this.pluginContext, this.classLoader, superClassInternalName, true);
+            classNode = ASMClassNodeAdapter.get(this.pluginInputStreamProvider, this.classLoader, this.protectionDomain, superClassInternalName, true);
         }
 
         return false;
@@ -444,14 +524,14 @@ public class ASMClassNodeAdapter {
             return Collections.emptyList();
         }
 
-        final List<ASMClassNodeAdapter> innerClasses = new ArrayList<ASMClassNodeAdapter>();
+        final List<ASMClassNodeAdapter> innerClasses = new ArrayList<>();
         final List<InnerClassNode> innerClassNodes = this.classNode.innerClasses;
         for (InnerClassNode node : innerClassNodes) {
             if (node.name == null) {
                 continue;
             }
             // skip code.
-            ASMClassNodeAdapter adapter = get(this.pluginContext, this.classLoader, node.name, true);
+            ASMClassNodeAdapter adapter = get(this.pluginInputStreamProvider, this.classLoader, this.protectionDomain, node.name, true);
             if (adapter != null) {
                 innerClasses.add(adapter);
             }
@@ -473,7 +553,7 @@ public class ASMClassNodeAdapter {
             flags = ClassWriter.COMPUTE_MAXS;
         }
 
-        final ClassWriter classWriter = new ASMClassWriter(this.pluginContext, flags, this.classLoader);
+        final ClassWriter classWriter = new ASMClassWriter(this.pluginInputStreamProvider, flags, this.classLoader);
         this.classNode.accept(classWriter);
         return classWriter.toByteArray();
     }

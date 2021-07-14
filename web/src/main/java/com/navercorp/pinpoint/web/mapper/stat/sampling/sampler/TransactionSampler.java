@@ -18,11 +18,11 @@ package com.navercorp.pinpoint.web.mapper.stat.sampling.sampler;
 
 import com.navercorp.pinpoint.common.server.bo.serializer.stat.AgentStatUtils;
 import com.navercorp.pinpoint.common.server.bo.stat.TransactionBo;
-import com.navercorp.pinpoint.web.vo.stat.SampledCpuLoad;
+import com.navercorp.pinpoint.web.vo.stat.SampledTransaction;
 import com.navercorp.pinpoint.web.vo.stat.chart.DownSampler;
 import com.navercorp.pinpoint.web.vo.stat.chart.DownSamplers;
-import com.navercorp.pinpoint.web.vo.stat.SampledTransaction;
 import com.navercorp.pinpoint.web.vo.stat.chart.agent.AgentStatPoint;
+
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
@@ -45,11 +45,13 @@ public class TransactionSampler implements AgentStatSampler<TransactionBo, Sampl
         final AgentStatPoint<Double> sampledContinuation = newAgentStatPoint(timestamp, dataPoints, TransactionBo::getSampledContinuationCount);
         final AgentStatPoint<Double> unsampledNew = newAgentStatPoint(timestamp, dataPoints, TransactionBo::getUnsampledNewCount);
         final AgentStatPoint<Double> unsampledContinuation = newAgentStatPoint(timestamp, dataPoints, TransactionBo::getUnsampledContinuationCount);
+        final AgentStatPoint<Double> skippedNew = newAgentStatPoint(timestamp, dataPoints, TransactionBo::getSkippedNewSkipCount);
+        final AgentStatPoint<Double> skippedContinuation = newAgentStatPoint(timestamp, dataPoints, TransactionBo::getSkippedContinuationCount);
 
         final List<Double> totals = calculateTotalTps(dataPoints);
         AgentStatPoint<Double> total = createPoint(timestamp, totals);
 
-        SampledTransaction sampledTransaction = new SampledTransaction(sampledNew, sampledContinuation, unsampledNew, unsampledContinuation, total);
+        SampledTransaction sampledTransaction = new SampledTransaction(sampledNew, sampledContinuation, unsampledNew, unsampledContinuation, skippedNew, skippedContinuation, total);
         return sampledTransaction;
     }
 
@@ -94,6 +96,16 @@ public class TransactionSampler implements AgentStatSampler<TransactionBo, Sampl
                 isTransactionCollected = true;
                 totalCount += unsampledContinuationCount;
             }
+            final long skippedNewCount = transactionBo.getSkippedNewSkipCount();
+            if (skippedNewCount != TransactionBo.UNCOLLECTED_VALUE) {
+                isTransactionCollected = true;
+                totalCount += skippedNewCount;
+            }
+            final long skippedContinuationCount = transactionBo.getSkippedContinuationCount();
+            if (skippedContinuationCount != TransactionBo.UNCOLLECTED_VALUE) {
+                isTransactionCollected = true;
+                totalCount += skippedContinuationCount;
+            }
             if (isTransactionCollected) {
                 return calculateTps(totalCount, collectInterval);
             }
@@ -122,14 +134,8 @@ public class TransactionSampler implements AgentStatSampler<TransactionBo, Sampl
 
     private AgentStatPoint<Double> createPoint(long timestamp, List<Double> values) {
         if (values.isEmpty()) {
-            return SampledCpuLoad.UNCOLLECTED_POINT_CREATOR.createUnCollectedPoint(timestamp);
+            return SampledTransaction.UNCOLLECTED_POINT_CREATOR.createUnCollectedPoint(timestamp);
         }
-
-        return new AgentStatPoint<>(
-                    timestamp,
-                    DOUBLE_DOWN_SAMPLER.sampleMin(values),
-                    DOUBLE_DOWN_SAMPLER.sampleMax(values),
-                    DOUBLE_DOWN_SAMPLER.sampleAvg(values),
-                    DOUBLE_DOWN_SAMPLER.sampleSum(values));
+        return new AgentStatPoint<>(timestamp, values, DOUBLE_DOWN_SAMPLER);
     }
 }

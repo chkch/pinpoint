@@ -1,13 +1,12 @@
 package com.navercorp.pinpoint.common.server.bo.serializer.trace.v2;
 
-import com.google.common.collect.Lists;
 import com.navercorp.pinpoint.common.buffer.Buffer;
-import com.navercorp.pinpoint.common.buffer.OffsetFixedBuffer;
+import com.navercorp.pinpoint.common.buffer.FixedBuffer;
 import com.navercorp.pinpoint.common.server.bo.RandomTSpan;
 import com.navercorp.pinpoint.common.server.bo.SpanBo;
 import com.navercorp.pinpoint.common.server.bo.SpanChunkBo;
 import com.navercorp.pinpoint.common.server.bo.SpanEventBo;
-import com.navercorp.pinpoint.common.server.bo.SpanFactory;
+import com.navercorp.pinpoint.common.server.bo.thrift.SpanFactory;
 import com.navercorp.pinpoint.thrift.dto.TSpan;
 import com.navercorp.pinpoint.thrift.dto.TSpanChunk;
 import com.navercorp.pinpoint.thrift.dto.TSpanEvent;
@@ -19,7 +18,10 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.nio.ByteBuffer;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
+import java.util.Objects;
 import java.util.concurrent.TimeUnit;
 
 
@@ -108,13 +110,22 @@ public class SpanEncoderTest {
         return currentTime - randomSeed;
     }
 
-    private OffsetFixedBuffer wrapBuffer(ByteBuffer byteBuffer) {
-        return new OffsetFixedBuffer(byteBuffer.array(), byteBuffer.arrayOffset(), byteBuffer.remaining());
+    private Buffer wrapBuffer(ByteBuffer byteBuffer) {
+        byte[] buffer = new byte[byteBuffer.remaining()];
+        byteBuffer.get(buffer);
+        return new FixedBuffer(buffer);
     }
 
     private SpanBo randomSpan() {
         TSpan tSpan = randomTSpan.randomTSpan();
         return spanFactory.buildSpanBo(tSpan);
+    }
+
+    private <T> List<T> newArrayList(T... elements) {
+        Objects.requireNonNull(elements, "elements");
+        List<T> list = new ArrayList<>(elements.length);
+        Collections.addAll(list, elements);
+        return list;
     }
 
     public SpanBo randomComplexSpan() {
@@ -124,7 +135,7 @@ public class SpanEncoderTest {
         TSpanEvent tSpanEvent3 = randomTSpan.randomTSpanEvent((short) 3);
         TSpanEvent tSpanEvent4 = randomTSpan.randomTSpanEvent((short) 5);
 
-        tSpan.setSpanEventList(Lists.newArrayList(tSpanEvent1, tSpanEvent2, tSpanEvent3, tSpanEvent4));
+        tSpan.setSpanEventList(newArrayList(tSpanEvent1, tSpanEvent2, tSpanEvent3, tSpanEvent4));
         return spanFactory.buildSpanBo(tSpan);
     }
 
@@ -140,7 +151,7 @@ public class SpanEncoderTest {
         TSpanEvent tSpanEvent3 = randomTSpan.randomTSpanEvent((short) 3);
         TSpanEvent tSpanEvent4 = randomTSpan.randomTSpanEvent((short) 5);
 
-        tSpanChunk.setSpanEventList(Lists.newArrayList(tSpanEvent1, tSpanEvent2, tSpanEvent3, tSpanEvent4));
+        tSpanChunk.setSpanEventList(newArrayList(tSpanEvent1, tSpanEvent2, tSpanEvent3, tSpanEvent4));
         return spanFactory.buildSpanChunkBo(tSpanChunk);
     }
 
@@ -157,11 +168,11 @@ public class SpanEncoderTest {
         decodingContext.setCollectorAcceptedTime(spanBo.getCollectorAcceptTime());
 
         SpanBo decode = (SpanBo) spanDecoder.decode(qualifier, column, decodingContext);
+        // TODO Check CI log
+        // logger.debug("span dump \noriginal spanBo:{} \ndecode spanBo:{} ", spanBo, decode);
 
-        logger.debug("span dump \noriginal spanBo:{} \ndecode spanBo:{} ", spanBo, decode);
-
-        List<String> notSerializedField = Lists.newArrayList("parentApplicationId", "parentApplicationServiceType");
-        List<String> excludeField = Lists.newArrayList("annotationBoList", "spanEventBoList");
+        List<String> notSerializedField = newArrayList("parentApplicationId", "parentApplicationServiceType");
+        List<String> excludeField = newArrayList("annotationBoList", "spanEventBoList");
         notSerializedField.addAll(excludeField);
         Assert.assertTrue(EqualsBuilder.reflectionEquals(decode, spanBo, notSerializedField));
 
@@ -176,7 +187,7 @@ public class SpanEncoderTest {
     private void assertSpanChunk(SpanChunkBo spanChunkBo) {
         spanChunkBo.setCollectorAcceptTime(getCollectorAcceptTime());
 
-        SpanEncodingContext<SpanChunkBo> encodingContext = new SpanEncodingContext<SpanChunkBo>(spanChunkBo);
+        SpanEncodingContext<SpanChunkBo> encodingContext = new SpanEncodingContext<>(spanChunkBo);
         Buffer qualifier = wrapBuffer(spanEncoder.encodeSpanChunkQualifier(encodingContext));
         Buffer column = wrapBuffer(spanEncoder.encodeSpanChunkColumnValue(encodingContext));
 
@@ -185,11 +196,11 @@ public class SpanEncoderTest {
         decodingContext.setCollectorAcceptedTime(spanChunkBo.getCollectorAcceptTime());
 
         SpanChunkBo decode = (SpanChunkBo) spanDecoder.decode(qualifier, column, decodingContext);
+        // TODO Check CI log
+        // logger.debug("spanChunk dump \noriginal spanChunkBo:{} \ndecode spanChunkBo:{} ", spanChunkBo, decode);
 
-        logger.debug("spanChunk dump \noriginal spanChunkBo:{} \ndecode spanChunkBo:{} ", spanChunkBo, decode);
-
-        List<String> notSerializedField = Lists.newArrayList("endPoint", "serviceType", "applicationServiceType");
-        List<String> excludeField = Lists.newArrayList("spanEventBoList");
+        List<String> notSerializedField = newArrayList("endPoint", "serviceType", "applicationServiceType");
+        List<String> excludeField = newArrayList("spanEventBoList", "localAsyncId");
         notSerializedField.addAll(excludeField);
         Assert.assertTrue(EqualsBuilder.reflectionEquals(decode, spanChunkBo, notSerializedField));
 

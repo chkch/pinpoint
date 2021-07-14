@@ -33,6 +33,7 @@ import java.util.Timer;
 import java.util.TimerTask;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CopyOnWriteArraySet;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
@@ -42,6 +43,8 @@ public class WorkerActiveManager {
 
     private static final long DEFAULT_RECONNECT_DELAY = 5000;
     private static final long DEFAULT_AGENT_CHECK_DELAY = 10000;
+
+    private static final long DEFAULT_AGENT_LOOKUP_TIME = TimeUnit.HOURS.toMillis(1);
 
     private final Logger logger = LoggerFactory.getLogger(this.getClass());
 
@@ -64,11 +67,11 @@ public class WorkerActiveManager {
     private final List<String> defaultAgentIdList = new CopyOnWriteArrayList<>();
 
     public WorkerActiveManager(PinpointWebSocketResponseAggregator responseAggregator, AgentService agentService, Timer timer, TimerTaskDecorator timerTaskDecorator) {
-        this.responseAggregator = Objects.requireNonNull(responseAggregator, "responseAggregator must not be null");
-        this.agentService = Objects.requireNonNull(agentService, "agentService must not be null");
+        this.responseAggregator = Objects.requireNonNull(responseAggregator, "responseAggregator");
+        this.agentService = Objects.requireNonNull(agentService, "agentService");
 
-        this.timer = Objects.requireNonNull(timer, "timer must not be null");
-        this.timerTaskDecorator = Objects.requireNonNull(timerTaskDecorator, "timerTaskDecorator must not be null");
+        this.timer = Objects.requireNonNull(timer, "timer");
+        this.timerTaskDecorator = Objects.requireNonNull(timerTaskDecorator, "timerTaskDecorator");
 
         this.applicationName = this.responseAggregator.getApplicationName();
     }
@@ -86,8 +89,14 @@ public class WorkerActiveManager {
     }
 
     public void addReactiveWorker(AgentInfo agentInfo) {
-        if (applicationName.equals(agentInfo.getApplicationName())) {
+        if (this.applicationName.equals(agentInfo.getApplicationName())) {
             addReactiveWorker(agentInfo.getAgentId());
+        }
+    }
+
+    public void addReactiveWorker(String applicationName, String agentId) {
+        if (this.applicationName.equals(applicationName)) {
+            addReactiveWorker(agentId);
         }
     }
 
@@ -151,11 +160,13 @@ public class WorkerActiveManager {
 
         @Override
         public void run() {
-            logger.info("AgentCheckTimerTask started.");
+            if(logger.isDebugEnabled()) {
+                logger.debug("AgentCheckTimerTask started.");
+            }
 
             List<AgentInfo> agentInfoList = Collections.emptyList();
             try {
-                agentInfoList = agentService.getRecentAgentInfoList(applicationName);
+                agentInfoList = agentService.getRecentAgentInfoList(applicationName, DEFAULT_AGENT_LOOKUP_TIME);
             } catch (Exception e) {
                 logger.warn("failed while to get RecentAgentInfoList(applicationName:{}). error:{}.", applicationName, e.getMessage(), e);
             }
@@ -175,6 +186,7 @@ public class WorkerActiveManager {
                     }
                 }
             } finally {
+                final Timer timer = WorkerActiveManager.this.timer;
                 if (timer != null && onAgentCheckTimerTask.get() && !isStopped.get()) {
                     TimerTask agentCheckTimerTask = timerTaskDecorator.decorate(new AgentCheckTimerTask());
                     timer.schedule(agentCheckTimerTask, DEFAULT_AGENT_CHECK_DELAY);

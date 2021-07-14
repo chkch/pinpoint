@@ -32,6 +32,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 /**
  * @author minwoo.jung
  */
+@Deprecated
 public class AgentStatDataCollector extends DataCollector {
 
     private final Application application;
@@ -45,6 +46,7 @@ public class AgentStatDataCollector extends DataCollector {
     private final Map<String, Long> agentHeapUsageRate = new HashMap<>();
     private final Map<String, Long> agentGcCount = new HashMap<>();
     private final Map<String, Long> agentJvmCpuUsageRate = new HashMap<>();
+    private final Map<String, Long> agentSystemCpuUsageRate = new HashMap<>();
 
     public AgentStatDataCollector(DataCollectorCategory category, Application application, AgentStatDao<JvmGcBo> jvmGcDao, AgentStatDao<CpuLoadBo> cpuLoadDao, ApplicationIndexDao applicationIndexDao, long timeSlotEndTime, long slotInterval) {
         super(category);
@@ -62,7 +64,7 @@ public class AgentStatDataCollector extends DataCollector {
             return;
         }
 
-        Range range = Range.createUncheckedRange(timeSlotEndTime - slotInterval, timeSlotEndTime);
+        Range range = Range.newUncheckedRange(timeSlotEndTime - slotInterval, timeSlotEndTime);
         List<String> agentIds = applicationIndexDao.selectAgentIds(application.getName());
 
         for(String agentId : agentIds) {
@@ -71,6 +73,7 @@ public class AgentStatDataCollector extends DataCollector {
             long totalHeapSize = 0;
             long usedHeapSize = 0;
             long jvmCpuUsaged = 0;
+            long systemCpuUsaged = 0;
 
             for (JvmGcBo jvmGcBo : jvmGcBos) {
                 totalHeapSize += jvmGcBo.getHeapMax();
@@ -79,6 +82,7 @@ public class AgentStatDataCollector extends DataCollector {
 
             for (CpuLoadBo cpuLoadBo : cpuLoadBos) {
                 jvmCpuUsaged += cpuLoadBo.getJvmCpuLoad() * 100;
+                systemCpuUsaged += cpuLoadBo.getSystemCpuLoad() * 100;
             }
 
             if (!jvmGcBos.isEmpty()) {
@@ -90,8 +94,10 @@ public class AgentStatDataCollector extends DataCollector {
                 agentGcCount.put(agentId, accruedLastGcCount - accruedFirstGcCount);
             }
             if (!cpuLoadBos.isEmpty()) {
-                long percent = calculatePercent(jvmCpuUsaged, 100 * cpuLoadBos.size());
-                agentJvmCpuUsageRate.put(agentId, percent);
+                long jvmCpuUsagedPercent = calculatePercent(jvmCpuUsaged, 100 * cpuLoadBos.size());
+                agentJvmCpuUsageRate.put(agentId, jvmCpuUsagedPercent);
+                long systemCpuUsagedPercent = calculatePercent(systemCpuUsaged, 100 * cpuLoadBos.size());
+                agentSystemCpuUsageRate.put(agentId, systemCpuUsagedPercent);
             }
 
         }
@@ -112,4 +118,5 @@ public class AgentStatDataCollector extends DataCollector {
         return agentJvmCpuUsageRate;
     }
 
+    public Map<String, Long> getSystemCpuUsageRate() { return agentSystemCpuUsageRate; }
 }

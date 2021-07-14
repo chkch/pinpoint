@@ -22,6 +22,7 @@ import com.navercorp.pinpoint.bootstrap.DefaultAgentOption;
 import com.navercorp.pinpoint.bootstrap.config.DefaultProfilerConfig;
 import com.navercorp.pinpoint.bootstrap.config.ProfilerConfig;
 import com.navercorp.pinpoint.common.trace.ServiceType;
+import com.navercorp.pinpoint.common.util.StringUtils;
 import com.navercorp.pinpoint.profiler.context.module.DefaultApplicationContext;
 import com.navercorp.pinpoint.profiler.context.module.ModuleFactory;
 import com.navercorp.pinpoint.profiler.interceptor.registry.InterceptorRegistryBinder;
@@ -48,7 +49,11 @@ public class MockApplicationContextFactory {
         final String path = getFilePath(classLoader, configPath);
         ProfilerConfig profilerConfig = loadProfilerConfig(path);
 
-        ((DefaultProfilerConfig)profilerConfig).setApplicationServerType(ServiceType.TEST_STAND_ALONE.getName());
+        String applicationServerType = profilerConfig.getApplicationServerType();
+        if (StringUtils.isEmpty(applicationServerType)) {
+            applicationServerType = ServiceType.TEST_STAND_ALONE.getName();
+        }
+        ((DefaultProfilerConfig)profilerConfig).setApplicationServerType(applicationServerType);
         return profilerConfig;
     }
 
@@ -75,10 +80,11 @@ public class MockApplicationContextFactory {
 
     public DefaultApplicationContext build(ProfilerConfig config, ModuleFactory moduleFactory) {
         Instrumentation instrumentation = new DummyInstrumentation();
-        String mockAgent = "mockAgent";
+        String mockAgentId = "mockAgentId";
+        String mockAgentName = "mockAgentName";
         String mockApplicationName = "mockApplicationName";
 
-        AgentOption agentOption = new DefaultAgentOption(instrumentation, mockAgent, mockApplicationName, false, config, Collections.<String>emptyList(),
+        AgentOption agentOption = new DefaultAgentOption(instrumentation, mockAgentId, mockAgentName, mockApplicationName, false, config, Collections.<String>emptyList(),
                 null);
         return new DefaultApplicationContext(agentOption, moduleFactory);
     }

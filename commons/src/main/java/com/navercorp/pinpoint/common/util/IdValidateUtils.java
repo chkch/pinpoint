@@ -26,7 +26,7 @@ import java.util.regex.Pattern;
  */
 public final class IdValidateUtils {
 
-    private static final int DEFAULT_MAX_LENGTH = PinpointConstants.AGENT_NAME_MAX_LEN;
+    private static final int DEFAULT_MAX_LENGTH = PinpointConstants.AGENT_ID_MAX_LEN;
 
     public static String STABLE_VERSION_PATTERN_VALUE = "[0-9]+\\.[0-9]+\\.[0-9]";
 
@@ -43,7 +43,7 @@ public final class IdValidateUtils {
 
     public static boolean validateId(String id, int maxLength) {
         if (id == null) {
-            throw new NullPointerException("id must not be null");
+            throw new NullPointerException("id");
         }
         if (maxLength <= 0) {
             throw new IllegalArgumentException("negative maxLength:" + maxLength);
@@ -66,7 +66,7 @@ public final class IdValidateUtils {
 
     public static boolean checkLength(String id, int maxLength) {
         if (id == null) {
-            throw new NullPointerException("id must not be null");
+            throw new NullPointerException("id");
         }
         // try encode
         final int idLength = getLength(id);
@@ -82,11 +82,8 @@ public final class IdValidateUtils {
         }
 
         final byte[] idBytes = BytesUtils.toBytes(id);
-        if (idBytes == null) {
-            // encoding fail
-            return -1;
-        }
-        return idBytes.length;
+        // -1 encoding fail
+        return ArrayUtils.getLength(idBytes, -1);
     }
 
 }

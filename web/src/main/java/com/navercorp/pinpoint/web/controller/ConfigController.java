@@ -25,7 +25,6 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Controller;
 import org.springframework.util.StringUtils;
-import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestMethod;
 import org.springframework.web.bind.annotation.ResponseBody;
@@ -50,7 +49,7 @@ public class ConfigController {
     
     @RequestMapping(value="/configuration", method=RequestMethod.GET)
     @ResponseBody
-    public Map<String, Object> getProperties(@RequestHeader(value=SSO_USER, required=false) String userId) {
+    public Map<String, Object> getProperties() {
         Map<String, Object> result = new HashMap<>();
 
         result.put("sendUsage", webProperties.getSendUsage());
@@ -59,10 +58,13 @@ public class ConfigController {
         result.put("showActiveThreadDump", webProperties.isShowActiveThreadDump());
         result.put("enableServerMapRealTime", webProperties.isEnableServerMapRealTime());
         result.put("showApplicationStat", webProperties.isShowApplicationStat());
+        result.put("showStackTraceOnError", webProperties.isShowStackTraceOnError());
         result.put("openSource", webProperties.isOpenSource());
+        result.put("webhookEnable", webProperties.isWebhookEnable());
         result.put("version", Version.VERSION);
 
-        if (!StringUtils.isEmpty(userId)) {
+        String userId = userService.getUserIdFromSecurity();
+        if (StringUtils.hasLength(userId)) {
             User user = userService.selectUserByUserId(userId);
 
             if (user == null) {
@@ -74,7 +76,7 @@ public class ConfigController {
             }
         }
         
-        if(!StringUtils.isEmpty(webProperties.getSecurityGuideUrl())) {
+        if (StringUtils.hasLength(webProperties.getSecurityGuideUrl())) {
             result.put("securityGuideUrl", webProperties.getSecurityGuideUrl());
         }
         

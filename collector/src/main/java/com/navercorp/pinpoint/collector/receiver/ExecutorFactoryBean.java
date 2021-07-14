@@ -1,11 +1,11 @@
 /*
- * Copyright 2017 NAVER Corp.
+ * Copyright 2018 NAVER Corp.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -16,13 +16,15 @@
 
 package com.navercorp.pinpoint.collector.receiver;
 
+import com.navercorp.pinpoint.collector.monitor.CountingRejectedExecutionHandler;
+import com.navercorp.pinpoint.collector.monitor.BypassRunnableDecorator;
+import com.navercorp.pinpoint.collector.monitor.LoggingRejectedExecutionHandler;
+import com.navercorp.pinpoint.collector.monitor.MonitoredThreadPoolExecutor;
+import com.navercorp.pinpoint.collector.monitor.RejectedExecutionHandlerChain;
+import com.navercorp.pinpoint.collector.monitor.RunnableDecorator;
+
 import com.codahale.metrics.Gauge;
 import com.codahale.metrics.MetricRegistry;
-import com.navercorp.pinpoint.collector.monitor.CountingRejectedExecutionHandler;
-import com.navercorp.pinpoint.collector.monitor.MonitoredThreadPoolExecutor;
-import com.navercorp.pinpoint.collector.monitor.LoggingRejectedExecutionHandler;
-import com.navercorp.pinpoint.collector.monitor.RejectedExecutionHandlerChain;
-import com.navercorp.pinpoint.collector.monitor.MonitoredRunnableDecorator;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -41,6 +43,7 @@ public class ExecutorFactoryBean extends org.springframework.scheduling.concurre
     private String beanName;
 
     private MetricRegistry registry;
+
     private boolean preStartAllCoreThreads;
 
     public ExecutorFactoryBean() {
@@ -79,11 +82,14 @@ public class ExecutorFactoryBean extends org.springframework.scheduling.concurre
                                                         ThreadFactory threadFactory, RejectedExecutionHandler rejectedExecutionHandler) {
 
         rejectedExecutionHandler = wrapHandlerChain(rejectedExecutionHandler);
-        MonitoredRunnableDecorator monitoredRunnableDecorator = new MonitoredRunnableDecorator(beanName, registry);
+
+        RunnableDecorator runnableDecorator = new BypassRunnableDecorator(beanName);
 
         MonitoredThreadPoolExecutor monitoredThreadPoolExecutor = new MonitoredThreadPoolExecutor(corePoolSize, maxPoolSize, keepAliveSeconds, TimeUnit.MILLISECONDS,
-                queue, threadFactory, rejectedExecutionHandler, monitoredRunnableDecorator);
+                queue, threadFactory, rejectedExecutionHandler, runnableDecorator);
 
+        Gauge<Long> submitGauge = () -> (long) monitoredThreadPoolExecutor.getSubmitCount();
+        this.registry.register(MetricRegistry.name(beanName, "submitted"), submitGauge);
 
         Gauge<Long> runningGauge = () -> (long) monitoredThreadPoolExecutor.getActiveCount();
         this.registry.register(MetricRegistry.name(beanName, "running"), runningGauge);

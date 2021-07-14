@@ -87,6 +87,8 @@ struct TFTransaction {
     3: optional i64     sampledContinuationCount
     4: optional i64     unsampledNewCount
     5: optional i64     unsampledContinuationCount
+    6: optional i64     skippedNewCount
+    7: optional i64     skippedContinuationCount
 }
 
 struct TFActiveTraceHistogram {
@@ -116,6 +118,8 @@ struct TFAgentStat {
     60: optional TFResponseTime responseTime
     80: optional TFFileDescriptor fileDescriptor
     90: optional TFDirectBuffer directBuffer
+    100: optional TFTotalThreadCount totalThreadCount
+    110: optional TFLoadedClass loadedClass
     200: optional string    metadata
 }
 
@@ -140,4 +144,13 @@ struct TFDataSourceList {
 
 struct TFFileDescriptor {
     1: i64                      openFileDescriptorCount
+}
+
+struct TFTotalThreadCount {
+    1: i64                      totalThreadCount
+}
+
+struct TFLoadedClass {
+    1: i64                      loadedClassCount
+    2: i64                      unloadedClassCount
 }

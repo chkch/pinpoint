@@ -17,6 +17,7 @@
 package com.navercorp.pinpoint.web.batch.job;
 
 import com.navercorp.pinpoint.web.service.AgentInfoService;
+import com.navercorp.pinpoint.web.vo.AgentInfoFilter;
 import com.navercorp.pinpoint.web.vo.ApplicationAgentsList;
 import org.springframework.batch.core.ExitStatus;
 import org.springframework.batch.core.StepExecution;
@@ -33,6 +34,7 @@ import java.util.Queue;
 /**
  * @author Taejin Koo
  */
+@Deprecated
 public class AgentCountReader implements ItemReader<ApplicationAgentsList>, StepExecutionListener {
 
     @Autowired
@@ -42,7 +44,8 @@ public class AgentCountReader implements ItemReader<ApplicationAgentsList>, Step
 
     @Override
     public void beforeStep(StepExecution stepExecution) {
-        ApplicationAgentsList applicationAgentList = agentInfoService.getAllApplicationAgentsList();
+        long timestamp = System.currentTimeMillis();
+        ApplicationAgentsList applicationAgentList = agentInfoService.getAllApplicationAgentsList(AgentInfoFilter::accept, timestamp);
         queue.add(applicationAgentList);
     }
 

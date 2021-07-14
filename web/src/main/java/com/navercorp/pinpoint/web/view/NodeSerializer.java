@@ -17,6 +17,7 @@
 package com.navercorp.pinpoint.web.view;
 
 import com.navercorp.pinpoint.common.trace.ServiceType;
+import com.navercorp.pinpoint.web.applicationmap.appender.metric.DBMetric;
 import com.navercorp.pinpoint.web.applicationmap.nodes.Node;
 import com.navercorp.pinpoint.web.applicationmap.nodes.NodeType;
 import com.navercorp.pinpoint.web.applicationmap.nodes.ServerInstanceList;
@@ -26,6 +27,7 @@ import com.fasterxml.jackson.core.JsonGenerator;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonSerializer;
 import com.fasterxml.jackson.databind.SerializerProvider;
+import com.navercorp.pinpoint.web.vo.ResponseTimeStatics;
 
 import java.io.IOException;
 import java.util.List;
@@ -40,7 +42,7 @@ public class NodeSerializer extends JsonSerializer<Node>  {
     @Override
     public void serialize(Node node, JsonGenerator jgen, SerializerProvider provider) throws IOException, JsonProcessingException {
         jgen.writeStartObject();
-//        jgen.writeStringField("id", node.getNodeName());
+//        jgen.writeStringField("id", node.getNodeName());serverInstanceList
         jgen.writeStringField("key", node.getNodeName()); // necessary for go.js
 
         jgen.writeStringField("applicationName", node.getApplicationTextName()); // for go.js
@@ -65,8 +67,27 @@ public class NodeSerializer extends JsonSerializer<Node>  {
 
         writeHistogram(jgen, node);
         writeServerInstanceList(jgen, node);
+        writeMetricDB(jgen, node);
 
         jgen.writeEndObject();
+    }
+
+    private void writeMetricDB(JsonGenerator jgen, Node node) throws IOException {
+        if (node.getDBMetricList().isEmpty()) {
+            writeEmptyArray(jgen, "DBMetric");
+        } else {
+            jgen.writeArrayFieldStart("DBMetric");
+
+            for (DBMetric dbMetric : node.getDBMetricList()) {
+                jgen.writeStartObject();
+                jgen.writeStringField("databaseName", dbMetric.getDatabaseName());
+                jgen.writeStringField("databaseType", dbMetric.getDatabaseType().toString());
+                jgen.writeStringField("matchingKey", dbMetric.getMatchingKey());
+                jgen.writeEndObject();
+            }
+            jgen.writeEndArray();
+        }
+
     }
 
     private void writeServerInstanceList(JsonGenerator jgen, Node node) throws IOException {
@@ -75,10 +96,12 @@ public class NodeSerializer extends JsonSerializer<Node>  {
             serverInstanceList = null;
         }
 
+        final String agentIdNameMapKey = "agentIdNameMap";
         if (serverInstanceList == null) {
             jgen.writeNumberField("instanceCount", 0);
             jgen.writeNumberField("instanceErrorCount", 0);
             writeEmptyArray(jgen, "agentIds");
+            writeEmptyObject(jgen, agentIdNameMapKey);
             if (NodeType.DETAILED == node.getNodeType()) {
                 writeEmptyObject(jgen, "serverList");
             }
@@ -100,6 +123,13 @@ public class NodeSerializer extends JsonSerializer<Node>  {
                 jgen.writeString(agentId);
             }
             jgen.writeEndArray();
+
+            jgen.writeObjectFieldStart(agentIdNameMapKey);
+            for (Map.Entry<String, String> entry : serverInstanceList.getAgentIdNameMap().entrySet()) {
+                jgen.writeStringField(entry.getKey(), entry.getValue());
+            }
+            jgen.writeEndObject();
+
             if (NodeType.DETAILED == node.getNodeType()) {
                 jgen.writeObjectField("serverList", serverInstanceList);
             }
@@ -110,7 +140,7 @@ public class NodeSerializer extends JsonSerializer<Node>  {
         final ServiceType serviceType = node.getServiceType();
         final NodeHistogram nodeHistogram = node.getNodeHistogram();
         // FIXME isn't this all ServiceTypes that can be a node?
-        if (serviceType.isWas() || serviceType.isTerminal() || serviceType.isUnknown() || serviceType.isUser() || serviceType.isQueue()) {
+        if (serviceType.isWas() || serviceType.isTerminal() || serviceType.isUnknown() || serviceType.isUser() || serviceType.isQueue() || serviceType.isAlias()) {
             Histogram applicationHistogram = nodeHistogram.getApplicationHistogram();
             if (applicationHistogram == null) {
                 jgen.writeBooleanField("hasAlert", false);  // for go.js
@@ -131,6 +161,8 @@ public class NodeSerializer extends JsonSerializer<Node>  {
                 }
             }
 
+            ResponseTimeStatics responseTimeStatics = ResponseTimeStatics.fromHistogram(applicationHistogram);
+            jgen.writeObjectField(ResponseTimeStatics.RESPONSE_STATISTICS, responseTimeStatics);
             if (applicationHistogram == null) {
                 writeEmptyObject(jgen, "histogram");
             } else {
@@ -140,15 +172,17 @@ public class NodeSerializer extends JsonSerializer<Node>  {
                 Map<String, Histogram> agentHistogramMap = nodeHistogram.getAgentHistogramMap();
                 if (agentHistogramMap == null) {
                     writeEmptyObject(jgen, "agentHistogram");
+                    writeEmptyObject(jgen, ResponseTimeStatics.AGENT_RESPONSE_STATISTICS);
                 } else {
                     jgen.writeObjectField("agentHistogram", agentHistogramMap);
+                    jgen.writeObjectField(ResponseTimeStatics.AGENT_RESPONSE_STATISTICS, nodeHistogram.getAgentResponseStatisticsMap());
                 }
             }
         } else {
             jgen.writeBooleanField("hasAlert", false);  // for go.js
         }
         // FIXME isn't this all ServiceTypes that can be a node?
-        if (serviceType.isWas() || serviceType.isUser() || serviceType.isTerminal() || serviceType.isUnknown() || serviceType.isQueue()) {
+        if (serviceType.isWas() || serviceType.isUser() || serviceType.isTerminal() || serviceType.isUnknown() || serviceType.isQueue() || serviceType.isAlias()) {
             List<ResponseTimeViewModel> applicationTimeSeriesHistogram = nodeHistogram.getApplicationTimeHistogram();
             if (applicationTimeSeriesHistogram == null) {
                 writeEmptyArray(jgen, "timeSeriesHistogram");

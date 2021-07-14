@@ -16,16 +16,17 @@
 package com.navercorp.pinpoint.web.dao.hbase;
 
 import com.navercorp.pinpoint.common.server.bo.codec.stat.join.TransactionDecoder;
+import com.navercorp.pinpoint.common.server.bo.stat.join.JoinTransactionBo;
 import com.navercorp.pinpoint.common.server.bo.stat.join.StatType;
 import com.navercorp.pinpoint.web.dao.ApplicationTransactionDao;
 import com.navercorp.pinpoint.web.mapper.stat.ApplicationStatMapper;
 import com.navercorp.pinpoint.web.mapper.stat.SampledApplicationStatResultExtractor;
-import com.navercorp.pinpoint.web.mapper.stat.sampling.sampler.JoinTransactionSampler;
+import com.navercorp.pinpoint.web.mapper.stat.sampling.sampler.ApplicationStatSampler;
 import com.navercorp.pinpoint.web.util.TimeWindow;
 import com.navercorp.pinpoint.web.vo.Range;
 import com.navercorp.pinpoint.web.vo.stat.AggreJoinTransactionBo;
 import com.navercorp.pinpoint.web.vo.stat.AggregationStatData;
-import org.springframework.beans.factory.annotation.Autowired;
+
 import org.springframework.stereotype.Repository;
 
 import java.util.ArrayList;
@@ -37,20 +38,23 @@ import java.util.List;
 @Repository
 public class HbaseApplicationTransactionDao implements ApplicationTransactionDao {
 
-    @Autowired
-    private TransactionDecoder transactionDecoder;
+    private final TransactionDecoder transactionDecoder;
 
-    @Autowired
-    private JoinTransactionSampler transactionSampler;
+    private final ApplicationStatSampler<JoinTransactionBo> transactionSampler;
 
-    @Autowired
-    private HbaseApplicationStatDaoOperations operations;
+    private final HbaseApplicationStatDaoOperations operations;
+
+    public HbaseApplicationTransactionDao(TransactionDecoder transactionDecoder, ApplicationStatSampler<JoinTransactionBo> transactionSampler, HbaseApplicationStatDaoOperations operations) {
+        this.transactionDecoder = transactionDecoder;
+        this.transactionSampler = transactionSampler;
+        this.operations = operations;
+    }
 
     @Override
     public List<AggreJoinTransactionBo> getApplicationStatList(String applicationId, TimeWindow timeWindow) {
         long scanFrom = timeWindow.getWindowRange().getFrom();
         long scanTo = timeWindow.getWindowRange().getTo() + timeWindow.getWindowSlotSize();
-        Range range = new Range(scanFrom, scanTo);
+        Range range = Range.newRange(scanFrom, scanTo);
         ApplicationStatMapper mapper = operations.createRowMapper(transactionDecoder, range);
         SampledApplicationStatResultExtractor resultExtractor = new SampledApplicationStatResultExtractor(timeWindow, mapper, transactionSampler);
         List<AggregationStatData> aggregationStatDataList = operations.getSampledStatList(StatType.APP_TRANSACTION_COUNT, resultExtractor, applicationId, range);

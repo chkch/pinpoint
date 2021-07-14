@@ -1,5 +1,5 @@
 /*
- * Copyright 2017 NAVER Corp.
+ * Copyright 2019 NAVER Corp.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,40 +17,47 @@
 package com.navercorp.pinpoint.web.vo.callstacks;
 
 import com.navercorp.pinpoint.common.server.bo.SpanBo;
-import com.navercorp.pinpoint.common.service.AnnotationKeyRegistryService;
-import com.navercorp.pinpoint.common.service.DefaultAnnotationKeyRegistryService;
-import com.navercorp.pinpoint.common.service.DefaultServiceTypeRegistryService;
-import com.navercorp.pinpoint.common.service.DefaultTraceMetadataLoaderService;
-import com.navercorp.pinpoint.common.service.ServiceTypeRegistryService;
-import com.navercorp.pinpoint.common.service.TraceMetadataLoaderService;
-import com.navercorp.pinpoint.common.trace.AnnotationKeyMatcher;
-import com.navercorp.pinpoint.common.util.TransactionId;
-import com.navercorp.pinpoint.common.util.logger.CommonLoggerFactory;
-import com.navercorp.pinpoint.common.util.logger.StdoutCommonLoggerFactory;
+import com.navercorp.pinpoint.common.server.trace.ApiParserProvider;
+import com.navercorp.pinpoint.loader.service.AnnotationKeyRegistryService;
+import com.navercorp.pinpoint.loader.service.ServiceTypeRegistryService;
+import com.navercorp.pinpoint.common.profiler.util.TransactionId;
+import com.navercorp.pinpoint.web.calltree.span.Align;
 import com.navercorp.pinpoint.web.calltree.span.SpanAlign;
 import com.navercorp.pinpoint.web.service.AnnotationKeyMatcherService;
+import com.navercorp.pinpoint.web.service.ProxyRequestTypeRegistryService;
+
+import com.navercorp.pinpoint.web.service.RecorderFactoryProvider;
 import org.junit.Assert;
 import org.junit.Test;
-
-import java.util.Collections;
+import org.junit.runner.RunWith;
+import org.mockito.Mock;
+import org.mockito.junit.MockitoJUnitRunner;
 
 /**
  * @author Woonduk Kang(emeroad)
  */
+@RunWith(MockitoJUnitRunner.class)
 public class RecordFactoryTest {
 
+    @Mock
+    private ServiceTypeRegistryService mockServiceTypeRegistryService;
+
+    @Mock
+    private AnnotationKeyRegistryService mockAnnotationKeyRegistryService;
+
+    @Mock
+    private AnnotationKeyMatcherService mockAnnotationKeyMatcherService;
+
+    @Mock
+    private ProxyRequestTypeRegistryService mockProxyRequestTypeRegistryService;
+
+    @Mock
+    private ApiParserProvider apiParserProvider;
+
     private RecordFactory newRecordFactory() {
-        AnnotationKeyMatcherService annotationKeyMatcherService = new AnnotationKeyMatcherService() {
-            @Override
-            public AnnotationKeyMatcher findAnnotationKeyMatcher(short serviceType) {
-                return null;
-            }
-        };
-        CommonLoggerFactory loggerFactory = StdoutCommonLoggerFactory.INSTANCE;
-        TraceMetadataLoaderService typeLoaderService = new DefaultTraceMetadataLoaderService(Collections.emptyList(), loggerFactory);
-        ServiceTypeRegistryService serviceTypeRegistryService = new DefaultServiceTypeRegistryService(typeLoaderService, loggerFactory);
-        AnnotationKeyRegistryService annotationKeyRegistryService = new DefaultAnnotationKeyRegistryService(typeLoaderService, loggerFactory);
-        return new RecordFactory(annotationKeyMatcherService, serviceTypeRegistryService, annotationKeyRegistryService);
+        RecorderFactoryProvider recorderFactoryProvider = new RecorderFactoryProvider(mockServiceTypeRegistryService,
+                mockAnnotationKeyMatcherService, mockAnnotationKeyRegistryService, mockProxyRequestTypeRegistryService, apiParserProvider);
+        return recorderFactoryProvider.getRecordFactory();
     }
 
     public void get() {
@@ -58,16 +65,16 @@ public class RecordFactoryTest {
     }
 
     @Test
-    public void getException_check_argument() throws Exception {
+    public void getException_check_argument() {
         final RecordFactory factory = newRecordFactory();
 
         SpanBo spanBo = new SpanBo();
         spanBo.setTransactionId(new TransactionId("test", 0, 0));
         spanBo.setExceptionInfo(1, null);
-        SpanAlign spanAlign = new SpanAlign(spanBo);
+        Align align = new SpanAlign(spanBo);
 
 
-        Record exceptionRecord = factory.getException(0, 0, spanAlign);
+        Record exceptionRecord = factory.getException(0, 0, align);
 
         Assert.assertNotNull(exceptionRecord.getArguments());
     }
@@ -75,7 +82,7 @@ public class RecordFactoryTest {
 
 
     @Test
-    public void getParameter_check_argument() throws Exception {
+    public void getParameter_check_argument() {
 
         final RecordFactory factory = newRecordFactory();
 

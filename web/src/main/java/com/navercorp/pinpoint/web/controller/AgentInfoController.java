@@ -23,10 +23,13 @@ import com.navercorp.pinpoint.web.service.AgentInfoService;
 import com.navercorp.pinpoint.web.vo.AgentDownloadInfo;
 import com.navercorp.pinpoint.web.vo.AgentEvent;
 import com.navercorp.pinpoint.web.vo.AgentInfo;
+import com.navercorp.pinpoint.web.vo.AgentInfoFilter;
 import com.navercorp.pinpoint.web.vo.AgentInstallationInfo;
 import com.navercorp.pinpoint.web.vo.AgentStatus;
+import com.navercorp.pinpoint.web.vo.AgentInfoFilterChain;
 import com.navercorp.pinpoint.web.vo.ApplicationAgentsList;
 import com.navercorp.pinpoint.web.vo.CodeResult;
+import com.navercorp.pinpoint.web.vo.DefaultAgentInfoFilter;
 import com.navercorp.pinpoint.web.vo.Range;
 import com.navercorp.pinpoint.web.vo.timeline.inspector.InspectorTimeline;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -57,7 +60,8 @@ public class AgentInfoController {
     @RequestMapping(value = "/getAgentList", method = RequestMethod.GET, params = {"!application"})
     @ResponseBody
     public ApplicationAgentsList getAgentList() {
-        return this.agentInfoService.getAllApplicationAgentsList();
+        long timestamp = System.currentTimeMillis();
+        return getAgentList(timestamp);
     }
 
     @RequestMapping(value = "/getAgentList", method = RequestMethod.GET, params = {"!application", "from", "to"})
@@ -65,7 +69,9 @@ public class AgentInfoController {
     public ApplicationAgentsList getAgentList(
             @RequestParam("from") long from,
             @RequestParam("to") long to) {
-        return this.agentInfoService.getAllApplicationAgentsList(to);
+        AgentInfoFilter filter = new DefaultAgentInfoFilter(from);
+        long timestamp = to;
+        return this.agentInfoService.getAllApplicationAgentsList(filter, timestamp);
     }
 
     @PreAuthorize("hasPermission(#applicationName, 'application', 'inspector')")
@@ -73,14 +79,14 @@ public class AgentInfoController {
     @ResponseBody
     public ApplicationAgentsList getAgentList(
             @RequestParam("timestamp") long timestamp) {
-        return this.agentInfoService.getAllApplicationAgentsList(timestamp);
+        return this.agentInfoService.getAllApplicationAgentsList(AgentInfoFilter::accept, timestamp);
     }
 
     @RequestMapping(value = "/getAgentList", method = RequestMethod.GET, params = {"application"})
     @ResponseBody
-    public ApplicationAgentsList getAgentList(
-            @RequestParam("application") String applicationName) {
-        return this.agentInfoService.getApplicationAgentsList(ApplicationAgentsList.GroupBy.HOST_NAME, applicationName);
+    public ApplicationAgentsList getAgentList(@RequestParam("application") String applicationName) {
+        long timestamp = System.currentTimeMillis();
+        return getAgentList(applicationName, timestamp);
     }
 
     @PreAuthorize("hasPermission(#applicationName, 'application', 'inspector')")
@@ -90,7 +96,12 @@ public class AgentInfoController {
             @RequestParam("application") String applicationName,
             @RequestParam("from") long from,
             @RequestParam("to") long to) {
-        return this.agentInfoService.getApplicationAgentsList(ApplicationAgentsList.GroupBy.HOST_NAME, applicationName, to);
+        AgentInfoFilter containerFilter = new AgentInfoFilterChain(
+                AgentInfoFilter::filterServer,
+                new DefaultAgentInfoFilter(from)
+        );
+        long timestamp = to;
+        return this.agentInfoService.getApplicationAgentsList(ApplicationAgentsList.GroupBy.HOST_NAME, containerFilter, applicationName, timestamp);
     }
 
     @PreAuthorize("hasPermission(#applicationName, 'application', 'inspector')")
@@ -99,7 +110,11 @@ public class AgentInfoController {
     public ApplicationAgentsList getAgentList(
             @RequestParam("application") String applicationName,
             @RequestParam("timestamp") long timestamp) {
-        return this.agentInfoService.getApplicationAgentsList(ApplicationAgentsList.GroupBy.HOST_NAME, applicationName, timestamp);
+        AgentInfoFilter runningContainerFilter = new AgentInfoFilterChain(
+                AgentInfoFilter::filterServer,
+                new DefaultAgentInfoFilter(Long.MAX_VALUE)
+        );
+        return this.agentInfoService.getApplicationAgentsList(ApplicationAgentsList.GroupBy.HOST_NAME, runningContainerFilter, applicationName, timestamp);
     }
 
     @RequestMapping(value = "/getAgentInfo", method = RequestMethod.GET)
@@ -135,7 +150,7 @@ public class AgentInfoController {
             @RequestParam("from") long from,
             @RequestParam("to") long to,
             @RequestParam(value = "exclude", defaultValue = "") int[] excludeEventTypeCodes) {
-        Range range = new Range(from, to);
+        Range range = Range.newRange(from, to);
         return this.agentEventService.getAgentEvents(agentId, range, excludeEventTypeCodes);
     }
 
@@ -146,8 +161,8 @@ public class AgentInfoController {
             @RequestParam("agentId") String agentId,
             @RequestParam("from") long from,
             @RequestParam("to") long to) {
-        Range range = new Range(from, to);
-        return agentInfoService.getAgentStatusTimeline(agentId, range, null);
+        Range range = Range.newRange(from, to);
+        return agentInfoService.getAgentStatusTimeline(agentId, range);
     }
 
     @PreAuthorize("hasPermission(new com.navercorp.pinpoint.web.vo.AgentParam(#agentId, #to), 'agentParam', 'inspector')")
@@ -158,18 +173,18 @@ public class AgentInfoController {
             @RequestParam("from") long from,
             @RequestParam("to") long to,
             @RequestParam(value = "exclude", defaultValue = "") int[] excludeEventTypeCodes) {
-        Range range = new Range(from, to);
+        Range range = Range.newRange(from, to);
         return agentInfoService.getAgentStatusTimeline(agentId, range, excludeEventTypeCodes);
     }
 
     @RequestMapping(value = "/isAvailableAgentId")
     @ResponseBody
     public CodeResult isAvailableAgentId(@RequestParam("agentId") String agentId) {
-        if (!IdValidateUtils.checkLength(agentId, PinpointConstants.AGENT_NAME_MAX_LEN)) {
+        if (!IdValidateUtils.checkLength(agentId, PinpointConstants.AGENT_ID_MAX_LEN)) {
             return new CodeResult(CODE_FAIL, "length range is 1 ~ 24");
         }
 
-        if (!IdValidateUtils.validateId(agentId, PinpointConstants.AGENT_NAME_MAX_LEN)) {
+        if (!IdValidateUtils.validateId(agentId, PinpointConstants.AGENT_ID_MAX_LEN)) {
             return new CodeResult(CODE_FAIL, "invalid pattern(" + IdValidateUtils.ID_PATTERN_VALUE + ")");
         }
 

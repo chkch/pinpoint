@@ -30,16 +30,23 @@ public interface UserService {
 
     void insertUserList(List<User> users);
 
-    void deleteUser(User user);
+    void deleteUser(String userId);
 
     void updateUser(User user);
+
+    List<User> searchUser(String condition);
 
     List<User> selectUser();
 
     User selectUserByUserId(String userId);
-
+    
+    List<User> selectUserByUserGroupId(String userGroupId);
+    
     List<User> selectUserByUserName(String userName);
 
     List<User> selectUserByDepartment(String department);
 
+    boolean isExistUserId(String userId);
+
+    String getUserIdFromSecurity();
 }

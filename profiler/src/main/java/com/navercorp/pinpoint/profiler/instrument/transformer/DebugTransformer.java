@@ -20,6 +20,7 @@ import java.security.ProtectionDomain;
 import java.util.Arrays;
 
 import com.navercorp.pinpoint.bootstrap.instrument.InstrumentContext;
+import java.util.Objects;
 import com.navercorp.pinpoint.profiler.instrument.InstrumentEngine;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -41,20 +42,14 @@ public class DebugTransformer implements ClassFileTransformer {
     private final InstrumentEngine instrumentEngine;
 
     public DebugTransformer(InstrumentEngine instrumentEngine, InstrumentContext instrumentContext) {
-        if (instrumentEngine == null) {
-            throw new NullPointerException("instrumentEngine must not be null");
-        }
-        if (instrumentContext == null) {
-            throw new NullPointerException("instrumentContext must not be null");
-        }
-        this.instrumentEngine = instrumentEngine;
-        this.instrumentContext = instrumentContext;
+        this.instrumentEngine = Objects.requireNonNull(instrumentEngine, "instrumentEngine");
+        this.instrumentContext = Objects.requireNonNull(instrumentContext, "instrumentContext");
     }
 
     @Override
     public byte[] transform(ClassLoader loader, String className, Class<?> classBeingRedefined, ProtectionDomain protectionDomain, byte[] classfileBuffer) throws IllegalClassFormatException {
         try {
-            final InstrumentClass target = instrumentEngine.getClass(instrumentContext, loader, className, classfileBuffer);
+            final InstrumentClass target = instrumentEngine.getClass(instrumentContext, loader, className, protectionDomain, classfileBuffer);
             if (target == null) {
                 if (logger.isWarnEnabled()) {
                     logger.warn("targetClass not found. className:{}, classBeingRedefined:{} :{} ", className, classBeingRedefined, loader);
@@ -72,7 +67,7 @@ public class DebugTransformer implements ClassFileTransformer {
                     logger.trace("### c={}, m={}, params={}", className, method.getName(), Arrays.toString(method.getParameterTypes()));
                 }
                 
-                method.addInterceptor(BasicMethodInterceptor.class.getName());
+                method.addInterceptor(BasicMethodInterceptor.class);
             }
     
             return target.toBytecode();

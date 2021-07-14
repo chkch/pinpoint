@@ -5,7 +5,7 @@
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -16,36 +16,46 @@
 
 package com.navercorp.pinpoint.collector.receiver;
 
+import com.navercorp.pinpoint.collector.receiver.thrift.DelegateDispatchHandler;
 import com.navercorp.pinpoint.common.server.util.AcceptedTimeService;
 
 import com.navercorp.pinpoint.collector.manage.HandlerManager;
 import org.springframework.beans.factory.FactoryBean;
 import org.springframework.beans.factory.annotation.Autowired;
 
+import javax.annotation.PostConstruct;
 import java.util.Objects;
 
 /**
  * @author Taejin Koo
  */
-public class DispatchHandlerFactoryBean implements FactoryBean<DispatchHandler> {
+public class DispatchHandlerFactoryBean<REQ, RES> implements FactoryBean<DispatchHandler<REQ, RES>> {
 
-    @Autowired
     private AcceptedTimeService acceptedTimeService;
-    private final DispatchHandler delegate;
+    private DispatchHandler<REQ, RES> dispatchHandler;
 
-    private final HandlerManager handlerManager;
+    private HandlerManager handlerManager;
 
-    public DispatchHandlerFactoryBean(DispatchHandler delegate, HandlerManager handlerManager) {
-        this.delegate = Objects.requireNonNull(delegate, "delegate must not be null");
-        this.handlerManager = Objects.requireNonNull(handlerManager, "handlerManager must not be null");
+    public DispatchHandlerFactoryBean() {
+
     }
 
+    @Autowired
+    public void setAcceptedTimeService(AcceptedTimeService acceptedTimeService) {
+        this.acceptedTimeService = Objects.requireNonNull(acceptedTimeService, "acceptedTimeService");
+    }
 
+    public void setDispatchHandler(DispatchHandler<REQ, RES> dispatchHandler) {
+        this.dispatchHandler = Objects.requireNonNull(dispatchHandler, "dispatchHandler");
+    }
 
+    public void setHandlerManager(HandlerManager handlerManager) {
+        this.handlerManager = Objects.requireNonNull(handlerManager, "handlerManager");
+    }
 
     @Override
-    public DispatchHandler getObject() throws Exception {
-        return new DelegateDispatchHandler(acceptedTimeService, delegate, handlerManager);
+    public DispatchHandler<REQ, RES> getObject() throws Exception {
+        return new DelegateDispatchHandler<>(acceptedTimeService, dispatchHandler, handlerManager);
     }
 
     @Override
@@ -56,5 +66,12 @@ public class DispatchHandlerFactoryBean implements FactoryBean<DispatchHandler> 
     @Override
     public boolean isSingleton() {
         return true;
+    }
+
+    @PostConstruct
+    public void afterPropertiesSet() {
+        Objects.requireNonNull(acceptedTimeService, "acceptedTimeService");
+        Objects.requireNonNull(dispatchHandler, "dispatchHandler");
+        Objects.requireNonNull(handlerManager, "handlerManager");
     }
 }

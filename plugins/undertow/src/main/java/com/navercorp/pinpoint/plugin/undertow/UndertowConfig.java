@@ -16,11 +16,10 @@
 
 package com.navercorp.pinpoint.plugin.undertow;
 
-import com.navercorp.pinpoint.bootstrap.config.ExcludeMethodFilter;
 import com.navercorp.pinpoint.bootstrap.config.ExcludePathFilter;
 import com.navercorp.pinpoint.bootstrap.config.Filter;
 import com.navercorp.pinpoint.bootstrap.config.ProfilerConfig;
-import com.navercorp.pinpoint.bootstrap.config.SkipFilter;
+import com.navercorp.pinpoint.bootstrap.config.ServerConfig;
 
 import java.util.List;
 
@@ -32,44 +31,51 @@ public class UndertowConfig {
     private final boolean enable;
     private final List<String> bootstrapMains;
     private final boolean hidePinpointHeader;
-
     private final boolean traceRequestParam;
     private final Filter<String> excludeUrlFilter;
     private final String realIpHeader;
     private final String realIpEmptyValue;
     private final Filter<String> excludeProfileMethodFilter;
+    private final boolean deployServlet;
+    private final Filter<String> httpHandlerClassNameFilter;
 
     public UndertowConfig(ProfilerConfig config) {
         if (config == null) {
-            throw new NullPointerException("config must not be null");
+            throw new NullPointerException("config");
         }
 
         // plugin
         this.enable = config.readBoolean("profiler.undertow.enable", true);
+        this.deployServlet = config.readBoolean("profiler.undertow.deploy.servlet", true);
         this.bootstrapMains = config.readList("profiler.undertow.bootstrap.main");
-        this.hidePinpointHeader = config.readBoolean("profiler.undertow.hidepinpointheader", true);
+        // Server
+        final ServerConfig serverConfig = new ServerConfig(config);
+        this.hidePinpointHeader = serverConfig.isHidePinpointHeader("profiler.undertow.hidepinpointheader");
+        this.traceRequestParam = serverConfig.isTraceRequestParam("profiler.undertow.tracerequestparam");
+        this.excludeUrlFilter = serverConfig.getExcludeUrlFilter("profiler.undertow.excludeurl");
+        this.realIpHeader = serverConfig.getRealIpHeader("profiler.undertow.realipheader");
+        this.realIpEmptyValue = serverConfig.getRealIpEmptyValue("profiler.undertow.realipemptyvalue");
+        this.excludeProfileMethodFilter = serverConfig.getExcludeMethodFilter("profiler.undertow.excludemethod");
 
-        // runtime
-        this.traceRequestParam = config.readBoolean("profiler.undertow.tracerequestparam", true);
-        final String tomcatExcludeURL = config.readString("profiler.undertow.excludeurl", "");
-        if (!tomcatExcludeURL.isEmpty()) {
-            this.excludeUrlFilter = new ExcludePathFilter(tomcatExcludeURL);
+        final String httpHandlerClassName = config.readString("profiler.undertow.http-handler.class.name", "");
+        if (!httpHandlerClassName.isEmpty()) {
+            this.httpHandlerClassNameFilter = new ExcludePathFilter(httpHandlerClassName, ".", ",");
         } else {
-            this.excludeUrlFilter = new SkipFilter<String>();
-        }
-        this.realIpHeader = config.readString("profiler.undertow.realipheader", null);
-        this.realIpEmptyValue = config.readString("profiler.undertow.realipemptyvalue", null);
-
-        final String tomcatExcludeProfileMethod = config.readString("profiler.undertow.excludemethod", "");
-        if (!tomcatExcludeProfileMethod.isEmpty()) {
-            this.excludeProfileMethodFilter = new ExcludeMethodFilter(tomcatExcludeProfileMethod);
-        } else {
-            this.excludeProfileMethodFilter = new SkipFilter<String>();
+            this.httpHandlerClassNameFilter = new Filter<String>() {
+                @Override
+                public boolean filter(String value) {
+                    return true;
+                }
+            };
         }
     }
 
     public boolean isEnable() {
         return enable;
+    }
+
+    public boolean isDeployServlet() {
+        return deployServlet;
     }
 
     public List<String> getBootstrapMains() {
@@ -98,6 +104,10 @@ public class UndertowConfig {
 
     public Filter<String> getExcludeProfileMethodFilter() {
         return excludeProfileMethodFilter;
+    }
+
+    public Filter<String> getHttpHandlerClassNameFilter() {
+        return httpHandlerClassNameFilter;
     }
 
     @Override

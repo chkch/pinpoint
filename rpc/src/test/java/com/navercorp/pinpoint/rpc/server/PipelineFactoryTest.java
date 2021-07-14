@@ -18,10 +18,11 @@ package com.navercorp.pinpoint.rpc.server;
 
 import com.navercorp.pinpoint.rpc.DiscardServerHandler;
 import com.navercorp.pinpoint.rpc.PipelineFactory;
-import com.navercorp.pinpoint.test.server.TestPinpointServerAcceptor;
+import com.navercorp.pinpoint.rpc.util.IOUtils;
 import com.navercorp.pinpoint.test.utils.TestAwaitTaskUtils;
 import com.navercorp.pinpoint.test.utils.TestAwaitUtils;
 import com.navercorp.pinpoint.rpc.util.PinpointRPCTestUtils;
+import com.navercorp.pinpoint.testcase.util.SocketUtils;
 import org.jboss.netty.buffer.ChannelBuffer;
 import org.jboss.netty.buffer.ChannelBuffers;
 import org.jboss.netty.channel.Channel;
@@ -32,7 +33,6 @@ import org.jboss.netty.handler.codec.frame.FrameDecoder;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
-import org.springframework.util.SocketUtils;
 
 import java.io.IOException;
 import java.net.Socket;
@@ -44,7 +44,7 @@ public class PipelineFactoryTest {
 
     private static int bindPort;
 
-    private static char START_KEY = '!';
+    private static final char START_KEY = '!';
 
     @BeforeClass
     public static void setUp() throws IOException {
@@ -85,9 +85,7 @@ public class PipelineFactoryTest {
             Assert.assertFalse(await);
 
         } finally {
-            if (socket != null) {
-                socket.close();
-            }
+            IOUtils.closeQuietly(socket);
 
             PinpointRPCTestUtils.close(serverAcceptor);
         }

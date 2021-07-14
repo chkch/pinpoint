@@ -16,9 +16,9 @@
 
 package com.navercorp.pinpoint.web.service.map.processor;
 
-import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.navercorp.pinpoint.common.trace.ServiceType;
+import com.navercorp.pinpoint.common.util.CollectionUtils;
 import com.navercorp.pinpoint.web.applicationmap.rawdata.LinkData;
 import com.navercorp.pinpoint.web.applicationmap.rawdata.LinkDataMap;
 import com.navercorp.pinpoint.web.dao.HostApplicationMapDao;
@@ -28,12 +28,14 @@ import com.navercorp.pinpoint.web.vo.Application;
 import com.navercorp.pinpoint.web.vo.Range;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.util.CollectionUtils;
 
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Replaces link data pointing to domains into applications if the target has an agent installed.
@@ -48,19 +50,13 @@ public class RpcCallProcessor implements LinkDataMapProcessor {
 
     private final VirtualLinkMarker virtualLinkMarker;
 
-    private final Map<AcceptApplicationCacheKey, Set<AcceptApplication>> acceptApplicationCache = Maps.newConcurrentMap();
+    private final Map<AcceptApplicationCacheKey, Set<AcceptApplication>> acceptApplicationCache = new ConcurrentHashMap<>();
 
     private final AcceptApplicationLocalCache rpcAcceptApplicationCache = new AcceptApplicationLocalCache();
 
     public RpcCallProcessor(HostApplicationMapDao hostApplicationMapDao, VirtualLinkMarker virtualLinkMarker) {
-        if (hostApplicationMapDao == null) {
-            throw new NullPointerException("hostApplicationMapDao must not be null");
-        }
-        if (virtualLinkMarker == null) {
-            throw new NullPointerException("virtualLinkMarker must not be null");
-        }
-        this.hostApplicationMapDao = hostApplicationMapDao;
-        this.virtualLinkMarker = virtualLinkMarker;
+        this.hostApplicationMapDao = Objects.requireNonNull(hostApplicationMapDao, "hostApplicationMapDao");
+        this.virtualLinkMarker = Objects.requireNonNull(virtualLinkMarker, "virtualLinkMarker");
     }
 
     @Override
@@ -82,7 +78,7 @@ public class RpcCallProcessor implements LinkDataMapProcessor {
             logger.debug("Finding accept applications for {}, {}", toApplication, range);
             final Set<AcceptApplication> acceptApplicationList = findAcceptApplications(linkData.getFromApplication(), toApplication.getName(), range);
             logger.debug("Found accept applications: {}", acceptApplicationList);
-            if (!CollectionUtils.isEmpty(acceptApplicationList)) {
+            if (CollectionUtils.hasLength(acceptApplicationList)) {
                 if (acceptApplicationList.size() == 1) {
                     logger.debug("Application info replaced. {} => {}", linkData, acceptApplicationList);
 
@@ -109,12 +105,35 @@ public class RpcCallProcessor implements LinkDataMapProcessor {
         return Collections.singletonList(linkData);
     }
 
+    private Set<AcceptApplication> filterAlias(Set<AcceptApplication> acceptApplicationList) {
+
+        if (acceptApplicationList.size() < 2) {
+            return acceptApplicationList;
+        }
+
+        final Set<AcceptApplication> resultSet = new HashSet<>();
+
+        for (AcceptApplication acceptApplication : acceptApplicationList) {
+            if (!acceptApplication.getApplication().getServiceType().isAlias()) {
+                resultSet.add(acceptApplication);
+            } else {
+                logger.debug("deduct alias application {}", acceptApplication);
+            }
+        }
+
+        if (resultSet.isEmpty()) {
+            return acceptApplicationList;
+        } else {
+            return resultSet;
+        }
+    }
+
     private Set<AcceptApplication> findAcceptApplications(Application fromApplication, String host, Range range) {
         logger.debug("findAcceptApplication {} {}", fromApplication, host);
 
         final RpcApplication rpcApplication = new RpcApplication(host, fromApplication);
         final Set<AcceptApplication> hit = this.rpcAcceptApplicationCache.get(rpcApplication);
-        if (!CollectionUtils.isEmpty(hit)) {
+        if (CollectionUtils.hasLength(hit)) {
             logger.debug("rpcAcceptApplicationCache hit {}", rpcApplication);
             return hit;
         }
@@ -130,11 +149,15 @@ public class RpcCallProcessor implements LinkDataMapProcessor {
         AcceptApplicationCacheKey cacheKey = new AcceptApplicationCacheKey(fromApplication, range);
         Set<AcceptApplication> cachedAcceptApplications = acceptApplicationCache.get(cacheKey);
         if (cachedAcceptApplications == null) {
-            logger.debug("acceptApplicationCache hit {}", fromApplication);
+            logger.debug("acceptApplicationCache miss {}", fromApplication);
             Set<AcceptApplication> queriedAcceptApplications = hostApplicationMapDao.findAcceptApplicationName(fromApplication, range);
+
+            final Set<AcceptApplication> filteredApplicationList = filterAlias(queriedAcceptApplications);
+            logger.debug("filteredApplicationList" + filteredApplicationList);
+
             Set<AcceptApplication> acceptApplications = Sets.newConcurrentHashSet();
-            if (!CollectionUtils.isEmpty(queriedAcceptApplications)) {
-                acceptApplications.addAll(queriedAcceptApplications);
+            if (CollectionUtils.hasLength(filteredApplicationList)) {
+                acceptApplications.addAll(filteredApplicationList);
             }
             cachedAcceptApplications = acceptApplicationCache.putIfAbsent(cacheKey, acceptApplications);
             if (cachedAcceptApplications == null) {

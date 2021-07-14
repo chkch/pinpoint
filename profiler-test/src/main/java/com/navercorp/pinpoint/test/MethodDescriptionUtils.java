@@ -36,10 +36,10 @@ final class MethodDescriptionUtils {
 
     public static String toJavaMethodDescriptor(String className, String methodName, String[] parameterType) {
         if (className == null) {
-            throw new NullPointerException("className must not be null");
+            throw new NullPointerException("className");
         }
         if (methodName == null) {
-            throw new NullPointerException("methodName must not be null");
+            throw new NullPointerException("methodName");
         }
         StringBuilder buffer = new StringBuilder(256);
         buffer.append(className);
@@ -91,12 +91,10 @@ final class MethodDescriptionUtils {
             buffer.append(EMPTY_ARRAY);
         } else {
             buffer.append('(');
-            int end = parameterType.length - 1;
-            for (int i = 0; i < parameterType.length; i++) {
+            buffer.append(parameterType[0]);
+            for (int i = 1; i < parameterType.length; i++) {
+                buffer.append(", ");
                 buffer.append(parameterType[i]);
-                if (i < end) {
-                    buffer.append(", ");
-                }
             }
             buffer.append(')');
         }

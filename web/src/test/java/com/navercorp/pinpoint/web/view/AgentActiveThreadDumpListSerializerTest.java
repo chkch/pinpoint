@@ -19,8 +19,11 @@ package com.navercorp.pinpoint.web.view;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.navercorp.pinpoint.common.util.CollectionUtils;
 import com.navercorp.pinpoint.common.util.ThreadMXBeanUtils;
+import com.navercorp.pinpoint.profiler.context.thrift.ThreadDumpThriftMessageConverter;
+import com.navercorp.pinpoint.profiler.monitor.metric.deadlock.ThreadDumpMetricSnapshot;
 import com.navercorp.pinpoint.profiler.util.ThreadDumpUtils;
 import com.navercorp.pinpoint.thrift.dto.command.TActiveThreadDump;
+import com.navercorp.pinpoint.thrift.dto.command.TThreadDump;
 import com.navercorp.pinpoint.web.vo.AgentActiveThreadDumpFactory;
 import com.navercorp.pinpoint.web.vo.AgentActiveThreadDumpList;
 import org.junit.Assert;
@@ -36,7 +39,8 @@ import java.util.Map;
  */
 public class AgentActiveThreadDumpListSerializerTest {
 
-    private ObjectMapper mapper = new ObjectMapper();
+    private final ObjectMapper mapper = new ObjectMapper();
+    private final ThreadDumpThriftMessageConverter threadDumpThriftMessageConverter = new ThreadDumpThriftMessageConverter();
 
     @Test
     public void serializeTest() throws Exception {
@@ -44,11 +48,11 @@ public class AgentActiveThreadDumpListSerializerTest {
         AgentActiveThreadDumpList activeThreadDumpList = createThreadDumpList(allThreadInfo);
         String jsonValue = mapper.writeValueAsString(activeThreadDumpList);
 
-        List list = mapper.readValue(jsonValue, List.class);
+        List<?> list = mapper.readValue(jsonValue, List.class);
 
         Assert.assertTrue(CollectionUtils.hasLength(list));
 
-        Map map = (Map) list.get(0);
+        Map<?, ?> map = (Map<?, ?>) list.get(0);
 
         Assert.assertTrue(map.containsKey("threadId"));
         Assert.assertTrue(map.containsKey("threadName"));
@@ -67,8 +71,10 @@ public class AgentActiveThreadDumpListSerializerTest {
         for (ThreadInfo threadInfo : allThreadInfo) {
             TActiveThreadDump tActiveThreadDump = new TActiveThreadDump();
             tActiveThreadDump.setStartTime(System.currentTimeMillis() - 1000);
-            tActiveThreadDump.setThreadDump(ThreadDumpUtils.createTThreadDump(threadInfo));
 
+            final ThreadDumpMetricSnapshot threadDumpMetricSnapshot =ThreadDumpUtils.createThreadDump(threadInfo);
+            final TThreadDump threadDump = this.threadDumpThriftMessageConverter.toMessage(threadDumpMetricSnapshot);
+            tActiveThreadDump.setThreadDump(threadDump);
             activeThreadDumpList.add(tActiveThreadDump);
         }
 

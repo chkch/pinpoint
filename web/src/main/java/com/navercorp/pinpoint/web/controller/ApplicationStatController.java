@@ -24,6 +24,8 @@ import com.navercorp.pinpoint.web.service.stat.ApplicationResponseTimeService;
 import com.navercorp.pinpoint.web.service.stat.ApplicationStatChartService;
 import com.navercorp.pinpoint.web.service.stat.ApplicationTransactionService;
 import com.navercorp.pinpoint.web.service.stat.ApplicationFileDescriptorService;
+import com.navercorp.pinpoint.web.service.stat.ApplicationTotalThreadCountService;
+import com.navercorp.pinpoint.web.service.stat.ApplicationLoadedClassService;
 import com.navercorp.pinpoint.web.util.TimeWindow;
 import com.navercorp.pinpoint.web.util.TimeWindowSlotCentricSampler;
 import com.navercorp.pinpoint.web.vo.Range;
@@ -31,6 +33,7 @@ import com.navercorp.pinpoint.web.vo.stat.chart.StatChart;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestMethod;
@@ -51,11 +54,12 @@ public class ApplicationStatController {
         this.applicationStatChartService = applicationStatChartService;
     }
 
+    @PreAuthorize("hasPermission(#applicationId, 'application', 'inspector')")
     @RequestMapping(method = RequestMethod.GET)
     @ResponseBody
     public StatChart getAgentStatChart(@RequestParam("applicationId") String applicationId, @RequestParam("from") long from, @RequestParam("to") long to) {
         TimeWindowSlotCentricSampler sampler = new TimeWindowSlotCentricSampler();
-        TimeWindow timeWindow = new TimeWindow(new Range(from, to), sampler);
+        TimeWindow timeWindow = new TimeWindow(Range.newRange(from, to), sampler);
         try {
             return this.applicationStatChartService.selectApplicationChart(applicationId, timeWindow);
         } catch (Exception e ) {
@@ -113,19 +117,19 @@ public class ApplicationStatController {
     @RequestMapping("/getApplicationStat/dataSource/chart")
     public static class ApplicationDataSourceController {
 
-        private final Logger logger = LoggerFactory.getLogger(ApplicationDataSourceController.this.getClass());
-        private ApplicationDataSourceService applicationDataSourceService;
+        private final Logger logger = LoggerFactory.getLogger(this.getClass());
+        private final ApplicationDataSourceService applicationDataSourceService;
 
         @Autowired
         public ApplicationDataSourceController(ApplicationDataSourceService applicationDataSourceService) {
-            ApplicationDataSourceController.this.applicationDataSourceService = applicationDataSourceService;
+            this.applicationDataSourceService = applicationDataSourceService;
         }
 
         @RequestMapping(method = RequestMethod.GET)
         @ResponseBody
         public List<StatChart> getAgentStatChart(@RequestParam("applicationId") String applicationId, @RequestParam("from") long from, @RequestParam("to") long to) {
             TimeWindowSlotCentricSampler sampler = new TimeWindowSlotCentricSampler();
-            TimeWindow timeWindow = new TimeWindow(new Range(from, to), sampler);
+            TimeWindow timeWindow = new TimeWindow(Range.newRange(from, to), sampler);
             try {
                 return this.applicationDataSourceService.selectApplicationChart(applicationId, timeWindow);
             } catch (Exception e ) {
@@ -150,6 +154,24 @@ public class ApplicationStatController {
         @Autowired
         public ApplicationDirectBufferController(ApplicationDirectBufferService applicationDirectBufferService) {
             super(applicationDirectBufferService);
+        }
+    }
+
+    @Controller
+    @RequestMapping("/getApplicationStat/totalThreadCount/chart")
+    public static class ApplicationTotalThreadCountController extends ApplicationStatController {
+        @Autowired
+        public ApplicationTotalThreadCountController(ApplicationTotalThreadCountService applicationTotalThreadCountService) {
+            super(applicationTotalThreadCountService);
+        }
+    }
+
+    @Controller
+    @RequestMapping("/getApplicationStat/loadedClass/chart")
+    public static class ApplicationLoadedClassController extends ApplicationStatController {
+        @Autowired
+        public ApplicationLoadedClassController(ApplicationLoadedClassService applicationLoadedClassService) {
+            super(applicationLoadedClassService);
         }
     }
 }

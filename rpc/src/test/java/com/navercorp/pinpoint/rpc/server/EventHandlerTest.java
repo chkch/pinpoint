@@ -23,10 +23,11 @@ import com.navercorp.pinpoint.rpc.util.MapUtils;
 import com.navercorp.pinpoint.rpc.util.PinpointRPCTestUtils;
 import com.navercorp.pinpoint.test.client.TestRawSocket;
 import com.navercorp.pinpoint.test.server.TestServerMessageListenerFactory;
+
+import com.navercorp.pinpoint.testcase.util.SocketUtils;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
-import org.springframework.util.SocketUtils;
 
 import java.io.IOException;
 import java.util.Map;
@@ -104,17 +105,13 @@ public class EventHandlerTest {
         Assert.assertNotNull(testRawSocket.readResponsePacket(3000));
     }
 
-    class EventHandler implements ServerStateChangeEventHandler {
+    static class EventHandler extends ServerStateChangeEventHandler {
 
         private SocketStateCode code;
 
         @Override
-        public void eventPerformed(PinpointServer pinpointServer, SocketStateCode stateCode) {
-            this.code = stateCode;
-        }
-
-        @Override
-        public void exceptionCaught(PinpointServer pinpointServer, SocketStateCode stateCode, Throwable e) {
+        public void stateUpdated(PinpointServer pinpointSocket, SocketStateCode updatedStateCode) {
+            this.code = updatedStateCode;
         }
 
         public SocketStateCode getCode() {
@@ -122,18 +119,18 @@ public class EventHandlerTest {
         }
     }
 
-    class ThrowExceptionEventHandler implements ServerStateChangeEventHandler {
+    static class ThrowExceptionEventHandler extends ServerStateChangeEventHandler {
 
         private int errorCount = 0;
 
         @Override
-        public void eventPerformed(PinpointServer pinpointServer, SocketStateCode stateCode) throws Exception {
-            throw new Exception("always error.");
-        }
-
-        @Override
-        public void exceptionCaught(PinpointServer pinpointServer, SocketStateCode stateCode, Throwable e) {
-            errorCount++;
+        public void stateUpdated(PinpointServer pinpointSocket, SocketStateCode updatedStateCode) throws Exception {
+            try {
+                throw new Exception("always error.");
+            } catch (Exception e) {
+                errorCount++;
+                throw new Exception("always error.");
+            }
         }
 
         public int getErrorCount() {

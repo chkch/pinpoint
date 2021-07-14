@@ -1,11 +1,11 @@
 /*
- * Copyright 2018 NAVER Corp.
+ * Copyright 2019 NAVER Corp.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *      http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -21,52 +21,44 @@ import com.navercorp.pinpoint.io.header.Header;
 import com.navercorp.pinpoint.io.request.ServerRequest;
 import com.navercorp.pinpoint.io.request.ServerResponse;
 import com.navercorp.pinpoint.thrift.io.DefaultTBaseLocator;
-import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Qualifier;
 
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
+import java.util.Objects;
 
 /**
  * @author emeroad
  */
-public class SpanDispatchHandler implements DispatchHandler {
+public class SpanDispatchHandler<REQ, RES> implements DispatchHandler<REQ, RES> {
 
-    @Autowired()
-    @Qualifier("spanHandler")
-    private SimpleHandler spanDataHandler;
+    private final SimpleHandler<REQ> spanDataHandler;
 
-    @Autowired()
-    @Qualifier("spanChunkHandler")
-    private SimpleHandler spanChunkHandler;
+    private final SimpleHandler<REQ> spanChunkHandler;
+    
 
-    public SpanDispatchHandler() {
+    public SpanDispatchHandler(SimpleHandler<REQ> spanDataHandler, SimpleHandler<REQ> spanChunkHandler) {
+        this.spanDataHandler = Objects.requireNonNull(spanDataHandler, "spanDataHandler");
+        this.spanChunkHandler = Objects.requireNonNull(spanChunkHandler, "spanChunkHandler");
     }
 
-
-    private SimpleHandler getSimpleHandler(Header header) {
+    private SimpleHandler<REQ> getSimpleHandler(Header header) {
         final short type = header.getType();
-        if (type == DefaultTBaseLocator.SPAN) {
-            return spanDataHandler;
+        switch (type) {
+            case DefaultTBaseLocator.SPAN:
+                return spanDataHandler;
+            case DefaultTBaseLocator.SPANCHUNK:
+                return spanChunkHandler;
         }
-        if (type == DefaultTBaseLocator.SPANCHUNK) {
-            return spanChunkHandler;
-        }
-
         throw new UnsupportedOperationException("unsupported header:" + header);
     }
 
     @Override
-    public void dispatchSendMessage(ServerRequest serverRequest) {
-        SimpleHandler simpleHandler = getSimpleHandler(serverRequest.getHeader());
+    public void dispatchSendMessage(ServerRequest<REQ> serverRequest) {
+        SimpleHandler<REQ> simpleHandler = getSimpleHandler(serverRequest.getHeader());
         simpleHandler.handleSimple(serverRequest);
     }
 
 
     @Override
-    public void dispatchRequestMessage(ServerRequest serverRequest, ServerResponse serverResponse) {
+    public void dispatchRequestMessage(ServerRequest<REQ> serverRequest, ServerResponse<RES> serverResponse) {
 
     }
 }

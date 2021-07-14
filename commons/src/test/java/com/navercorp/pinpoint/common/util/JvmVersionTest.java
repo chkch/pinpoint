@@ -16,10 +16,20 @@
 
 package com.navercorp.pinpoint.common.util;
 
-import static org.junit.Assert.*;
-import static com.navercorp.pinpoint.common.util.JvmVersion.*;
-
 import org.junit.Test;
+
+import static com.navercorp.pinpoint.common.util.JvmVersion.JAVA_10;
+import static com.navercorp.pinpoint.common.util.JvmVersion.JAVA_11;
+import static com.navercorp.pinpoint.common.util.JvmVersion.JAVA_5;
+import static com.navercorp.pinpoint.common.util.JvmVersion.JAVA_6;
+import static com.navercorp.pinpoint.common.util.JvmVersion.JAVA_7;
+import static com.navercorp.pinpoint.common.util.JvmVersion.JAVA_8;
+import static com.navercorp.pinpoint.common.util.JvmVersion.JAVA_9;
+import static com.navercorp.pinpoint.common.util.JvmVersion.JAVA_RECENT;
+import static com.navercorp.pinpoint.common.util.JvmVersion.UNSUPPORTED;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertSame;
+import static org.junit.Assert.assertTrue;
 
 /**
  * @author hyungil.jeong
@@ -75,7 +85,10 @@ public class JvmVersionTest {
         assertTrue(JAVA_10.onOrAfter(JAVA_8));
         assertTrue(JAVA_10.onOrAfter(JAVA_9));
         assertTrue(JAVA_10.onOrAfter(JAVA_10));
+        assertFalse(JAVA_10.onOrAfter(JAVA_RECENT));
         assertFalse(JAVA_10.onOrAfter(UNSUPPORTED));
+
+        assertTrue(JAVA_RECENT.onOrAfter(JAVA_11));
 
         // Unsupported
         assertFalse(UNSUPPORTED.onOrAfter(JAVA_5));
@@ -107,9 +120,17 @@ public class JvmVersionTest {
         // JDK 10
         final JvmVersion java_10 = JvmVersion.getFromVersion(10f);
         assertSame(JAVA_10, java_10);
+    }
+
+    @Test
+    public void testGetFromDoubleVersion_exceptional_case() {
         // Unsupported
         final JvmVersion java_unsupported = JvmVersion.getFromVersion(0.9f);
         assertSame(UNSUPPORTED, java_unsupported);
+
+        // new version
+        final JvmVersion java20 = JvmVersion.getFromVersion(20.f);
+        assertSame(JAVA_RECENT, java20);
     }
 
     @Test

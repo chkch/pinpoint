@@ -18,8 +18,9 @@ package com.navercorp.pinpoint.web.service;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
-import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import com.navercorp.pinpoint.web.alarm.checker.AlarmChecker;
@@ -31,42 +32,58 @@ import org.springframework.transaction.annotation.Transactional;
 
 /**
  * @author minwoo.jung
+ * @author Jongjin.Bae
  */
 @Service
 @Transactional(rollbackFor = {Exception.class})
 public class AlarmServiceImpl implements AlarmService {
-
-    @Autowired
-    AlarmDao alarmDao;
+    
+    private final AlarmDao alarmDao;
+    
+    @Value("${webhook.enable:false}")
+    private boolean webhookEnable;
+    
+    public AlarmServiceImpl(AlarmDao alarmDao) {
+        this.alarmDao = Objects.requireNonNull(alarmDao, "alarmDao");
+    }
     
     @Override
     public String insertRule(Rule rule) {
-        return alarmDao.insertRule(rule);
-        
+        if (webhookEnable) {
+            return alarmDao.insertRule(rule);
+        } else {
+            return alarmDao.insertRuleExceptWebhookSend(rule);
+        }
     }
-
+    
     @Override
     public void deleteRule(Rule rule) {
         alarmDao.deleteRule(rule);
+        alarmDao.deleteCheckerResult(rule.getRuleId());
     }
-
+    
     @Override
     @Transactional(readOnly = true)
     public List<Rule> selectRuleByUserGroupId(String userGroupId) {
         return alarmDao.selectRuleByUserGroupId(userGroupId);
     }
-
+    
     @Override
     @Transactional(readOnly = true)
     public List<Rule> selectRuleByApplicationId(String applicationId) {
         return alarmDao.selectRuleByApplicationId(applicationId);
     }
-
+    
     @Override
     public void updateRule(Rule rule) {
-        alarmDao.updateRule(rule);
+        if (webhookEnable) {
+            alarmDao.updateRule(rule);
+        } else {
+            alarmDao.updateRuleExceptWebhookSend(rule);
+        }
+        alarmDao.deleteCheckerResult(rule.getRuleId());
     }
-
+    
     @Override
     @Transactional(readOnly = true)
     public Map<String, CheckerResult> selectBeforeCheckerResults(String applicationId) {
@@ -75,36 +92,36 @@ public class AlarmServiceImpl implements AlarmService {
         
         if (!CheckerResultList.isEmpty()) {
             for (CheckerResult checkerResult : CheckerResultList) {
-                checkerResults.put(checkerResult.getCheckerName(), checkerResult);
+                checkerResults.put(checkerResult.getRuleId(), checkerResult);
             }
         }
         
         return checkerResults;
     }
-
+    
     @Override
     public void updateBeforeCheckerResult(CheckerResult beforeCheckerResult, AlarmChecker checker) {
-        alarmDao.deleteCheckerResult(beforeCheckerResult);
+        alarmDao.deleteCheckerResult(beforeCheckerResult.getRuleId());
         
         if (checker.isDetected()) {
             beforeCheckerResult.setDetected(true);
             beforeCheckerResult.increseCount();
             alarmDao.insertCheckerResult(beforeCheckerResult);
         } else {
-            alarmDao.insertCheckerResult(new CheckerResult(checker.getRule().getApplicationId(), checker.getRule().getCheckerName(), false, 0, 1));
+            alarmDao.insertCheckerResult(new CheckerResult(checker.getRule().getRuleId(), checker.getRule().getApplicationId(), checker.getRule().getCheckerName(), false, 0, 1));
         }
         
-         
+        
     }
-
+    
     @Override
     public void deleteRuleByUserGroupId(String groupId) {
         alarmDao.deleteRuleByUserGroupId(groupId);
     }
-
+    
     @Override
     public void updateUserGroupIdOfRule(UserGroup userGroup) {
         alarmDao.updateUserGroupIdOfRule(userGroup);
     }
-
+    
 }

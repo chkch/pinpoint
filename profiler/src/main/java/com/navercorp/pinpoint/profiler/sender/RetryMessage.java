@@ -16,6 +16,8 @@
 
 package com.navercorp.pinpoint.profiler.sender;
 
+import com.navercorp.pinpoint.common.util.ArrayUtils;
+
 /**
  * @author emeroad
  */
@@ -25,21 +27,42 @@ public class RetryMessage {
     private final int maxRetryCount;
 
     private final byte[] bytes;
+    private final Object message;
     private final String messageDescription;
 
     public RetryMessage(int maxRetryCount, byte[] bytes) {
-        this(0, maxRetryCount, bytes, "");
+        this(0, maxRetryCount, bytes, null,"");
     }
 
     public RetryMessage(int retryCount, int maxRetryCount, byte[] bytes) {
-        this(retryCount, maxRetryCount, bytes, "");
+        this(retryCount, maxRetryCount, bytes, null,"");
     }
 
     public RetryMessage(int maxRetryCount, byte[] bytes, String messageDescription) {
-        this(0, maxRetryCount, bytes, messageDescription);
+        this(0, maxRetryCount, bytes, null, messageDescription);
     }
 
     public RetryMessage(int retryCount, int maxRetryCount, byte[] bytes, String messageDescription) {
+        this(retryCount, maxRetryCount, bytes, null, messageDescription);
+    }
+
+    public RetryMessage(int maxRetryCount, Object message) {
+        this(0, maxRetryCount, null, message, "");
+    }
+
+    public RetryMessage(int retryCount, int maxRetryCount, Object message) {
+        this(retryCount, maxRetryCount, null, message, "");
+    }
+
+    public RetryMessage(int maxRetryCount, Object message, String messageDescription) {
+        this(0, maxRetryCount, null, message, messageDescription);
+    }
+
+    public RetryMessage(int retryCount, int maxRetryCount, Object message, String messageDescription) {
+        this(retryCount, maxRetryCount, null, message, messageDescription);
+    }
+
+    public RetryMessage(int retryCount, int maxRetryCount, byte[] bytes, Object message, String messageDescription) {
         if (retryCount < 0) {
             throw new IllegalArgumentException("retryCount:" + retryCount + " must be positive number");
         }
@@ -53,6 +76,7 @@ public class RetryMessage {
         this.retryCount = retryCount;
         this.maxRetryCount = maxRetryCount;
         this.bytes = bytes;
+        this.message = message;
         this.messageDescription = messageDescription;
     }
 
@@ -81,17 +105,10 @@ public class RetryMessage {
         final StringBuilder sb = new StringBuilder("RetryMessage{");
         sb.append("retryCount=").append(retryCount);
         sb.append(", maxRetryCount=").append(maxRetryCount);
-        sb.append(", bytes=").append(getLength(bytes));
+        sb.append(", bytes=").append(ArrayUtils.getLength(bytes, -1));
         sb.append(", messageDescription='").append(messageDescription).append('\'');
         sb.append('}');
         return sb.toString();
-    }
-
-    private int getLength(byte[] bytes) {
-        if (bytes == null) {
-            return -1;
-        }
-        return bytes.length;
     }
 
 }

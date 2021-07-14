@@ -17,7 +17,7 @@ package com.navercorp.pinpoint.profiler.context;
 
 import com.navercorp.pinpoint.bootstrap.context.*;
 import com.navercorp.pinpoint.bootstrap.context.scope.TraceScope;
-import com.navercorp.pinpoint.common.util.Assert;
+import java.util.Objects;
 import com.navercorp.pinpoint.profiler.context.id.TraceRoot;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -27,25 +27,21 @@ public class AsyncTrace implements Trace {
     private static final Logger logger = LoggerFactory.getLogger(AsyncTrace.class.getName());
     private static final boolean isDebug = logger.isDebugEnabled();
 
-    private final AsyncContextFactory asyncContextFactory;
-
     private final TraceRoot traceRoot;
     private final DefaultTrace trace;
 
     private final AsyncState asyncState;
 
-    public AsyncTrace(final AsyncContextFactory asyncContextFactory, final TraceRoot traceRoot, final DefaultTrace trace, final AsyncState asyncState) {
-        this.asyncContextFactory = Assert.requireNonNull(asyncContextFactory, "asyncContextFactory must not be null");
-        this.traceRoot = Assert.requireNonNull(traceRoot, "traceRoot must not be null");
-        this.trace = Assert.requireNonNull(trace, "trace must not be null");
-        this.asyncState = Assert.requireNonNull(asyncState, "asyncState must not be null");
+    public AsyncTrace(final TraceRoot traceRoot, final DefaultTrace trace, final AsyncState asyncState) {
+        this.traceRoot = Objects.requireNonNull(traceRoot, "traceRoot");
+        this.trace = Objects.requireNonNull(trace, "trace");
+        this.asyncState = Objects.requireNonNull(asyncState, "asyncState");
     }
 
 
     @Override
     public long getId() {
         return traceRoot.getLocalTransactionId();
-
     }
 
     @Override
@@ -53,16 +49,6 @@ public class AsyncTrace implements Trace {
         return this.traceRoot.getTraceStartTime();
     }
 
-    @Override
-    public Thread getBindThread() {
-        return null;
-    }
-
-    @Override
-    public long getThreadId() {
-         return this.traceRoot.getShared().getThreadId();
-
-    }
 
     @Override
     public TraceId getTraceId() {
@@ -107,16 +93,6 @@ public class AsyncTrace implements Trace {
     @Override
     public boolean isRootStack() {
         return this.trace.isRootStack();
-    }
-
-    /**
-     * @deprecated Since 1.7.0 Use {@link SpanEventRecorder#recordNextAsyncContext()}
-     * This API will be removed in 1.8.0
-     */
-    @Deprecated
-    @Override
-    public AsyncTraceId getAsyncTraceId() {
-        return asyncContextFactory.newAsyncTraceId(traceRoot);
     }
 
     @Override

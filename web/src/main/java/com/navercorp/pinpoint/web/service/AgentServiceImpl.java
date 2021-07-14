@@ -16,14 +16,15 @@
 
 package com.navercorp.pinpoint.web.service;
 
+import com.navercorp.pinpoint.common.util.CollectionUtils;
 import com.navercorp.pinpoint.io.request.Message;
 import com.navercorp.pinpoint.rpc.Future;
 import com.navercorp.pinpoint.rpc.PinpointSocket;
 import com.navercorp.pinpoint.rpc.ResponseMessage;
+import com.navercorp.pinpoint.rpc.packet.stream.StreamCode;
 import com.navercorp.pinpoint.rpc.stream.ClientStreamChannel;
-import com.navercorp.pinpoint.rpc.stream.ClientStreamChannelContext;
-import com.navercorp.pinpoint.rpc.stream.ClientStreamChannelMessageListener;
-import com.navercorp.pinpoint.rpc.stream.StreamChannelStateChangeEventHandler;
+import com.navercorp.pinpoint.rpc.stream.ClientStreamChannelEventHandler;
+import com.navercorp.pinpoint.rpc.stream.StreamException;
 import com.navercorp.pinpoint.rpc.util.ListUtils;
 import com.navercorp.pinpoint.thrift.dto.command.TCmdActiveThreadCount;
 import com.navercorp.pinpoint.thrift.dto.command.TCmdActiveThreadCountRes;
@@ -42,9 +43,9 @@ import com.navercorp.pinpoint.web.vo.AgentActiveThreadCount;
 import com.navercorp.pinpoint.web.vo.AgentActiveThreadCountFactory;
 import com.navercorp.pinpoint.web.vo.AgentActiveThreadCountList;
 import com.navercorp.pinpoint.web.vo.AgentInfo;
+
 import org.apache.thrift.TBase;
 import org.apache.thrift.TException;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -53,6 +54,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
@@ -67,21 +69,24 @@ public class AgentServiceImpl implements AgentService {
 
     private long timeDiffMs;
 
-    @Autowired
-    private AgentInfoService agentInfoService;
+    private final AgentInfoService agentInfoService;
 
-    @Autowired
-    private ClusterManager clusterManager;
+    private final ClusterManager clusterManager;
 
-    @Autowired
-    @Qualifier("commandHeaderTBaseSerializerFactory")
-    private SerializerFactory<HeaderTBaseSerializer> commandSerializerFactory;
+    private final SerializerFactory<HeaderTBaseSerializer> commandSerializerFactory;
 
-    @Autowired
-    @Qualifier("commandHeaderTBaseDeserializerFactory")
-    private DeserializerFactory<HeaderTBaseDeserializer> commandDeserializerFactory;
+    private final DeserializerFactory<HeaderTBaseDeserializer> commandDeserializerFactory;
 
-    @Value("#{pinpointWebProps['web.activethread.activeAgent.duration.days'] ?: 7}")
+    public AgentServiceImpl(AgentInfoService agentInfoService, ClusterManager clusterManager,
+                            @Qualifier("commandHeaderTBaseSerializerFactory") SerializerFactory<HeaderTBaseSerializer> commandSerializerFactory,
+                            @Qualifier("commandHeaderTBaseDeserializerFactory") DeserializerFactory<HeaderTBaseDeserializer> commandDeserializerFactory) {
+        this.agentInfoService = Objects.requireNonNull(agentInfoService, "agentInfoService");
+        this.clusterManager = Objects.requireNonNull(clusterManager, "clusterManager");
+        this.commandSerializerFactory = Objects.requireNonNull(commandSerializerFactory, "commandSerializerFactory");
+        this.commandDeserializerFactory = Objects.requireNonNull(commandDeserializerFactory, "commandDeserializerFactory");
+    }
+
+    @Value("${web.activethread.activeAgent.duration.days:7}")
     private void setTimeDiffMs(int durationDays) {
         this.timeDiffMs = TimeUnit.MILLISECONDS.convert(durationDays, TimeUnit.DAYS);
     }
@@ -188,10 +193,11 @@ public class AgentServiceImpl implements AgentService {
     @Override
     public PinpointRouteResponse invoke(AgentInfo agentInfo, byte[] payload, long timeout) throws TException {
         TCommandTransfer transferObject = createCommandTransferObject(agentInfo, payload);
-        PinpointSocket socket = clusterManager.getSocket(agentInfo);
+        List<PinpointSocket> socketList = clusterManager.getSocket(agentInfo);
 
         Future<ResponseMessage> future = null;
-        if (socket != null) {
+        if (CollectionUtils.nullSafeSize(socketList) == 1) {
+            PinpointSocket socket = socketList.get(0);
             future = socket.request(serializeRequest(transferObject));
         }
 
@@ -225,8 +231,10 @@ public class AgentServiceImpl implements AgentService {
         Map<AgentInfo, Future<ResponseMessage>> futureMap = new HashMap<>();
         for (AgentInfo agentInfo : agentInfoList) {
             TCommandTransfer transferObject = createCommandTransferObject(agentInfo, payload);
-            PinpointSocket socket = clusterManager.getSocket(agentInfo);
-            if (socket != null) {
+            List<PinpointSocket> socketList = clusterManager.getSocket(agentInfo);
+
+            if (CollectionUtils.nullSafeSize(socketList) == 1) {
+                PinpointSocket socket = socketList.get(0);
                 Future<ResponseMessage> future = socket.request(serializeRequest(transferObject));
                 futureMap.put(agentInfo, future);
             } else {
@@ -248,32 +256,53 @@ public class AgentServiceImpl implements AgentService {
     }
 
     @Override
-    public ClientStreamChannelContext openStream(AgentInfo agentInfo, TBase<?, ?> tBase, ClientStreamChannelMessageListener messageListener) throws TException {
+    public ClientStreamChannel openStream(AgentInfo agentInfo, TBase<?, ?> tBase, ClientStreamChannelEventHandler streamChannelEventHandler) throws TException, StreamException {
         byte[] payload = serializeRequest(tBase);
-        return openStream(agentInfo, payload, messageListener, null);
+        return openStream(agentInfo, payload, streamChannelEventHandler);
     }
 
     @Override
-    public ClientStreamChannelContext openStream(AgentInfo agentInfo, byte[] payload, ClientStreamChannelMessageListener messageListener) throws TException {
-        return openStream(agentInfo, payload, messageListener, null);
-    }
+    public ClientStreamChannel openStream(AgentInfo agentInfo, byte[] payload, ClientStreamChannelEventHandler streamChannelEventHandler) throws TException, StreamException {
+        assertClusterEnabled();
 
-    @Override
-    public ClientStreamChannelContext openStream(AgentInfo agentInfo, TBase<?, ?> tBase, ClientStreamChannelMessageListener messageListener, StreamChannelStateChangeEventHandler<ClientStreamChannel> stateChangeListener) throws TException {
-        byte[] payload = serializeRequest(tBase);
-        return openStream(agentInfo, payload, messageListener, stateChangeListener);
-    }
-
-    @Override
-    public ClientStreamChannelContext openStream(AgentInfo agentInfo, byte[] payload, ClientStreamChannelMessageListener messageListener, StreamChannelStateChangeEventHandler<ClientStreamChannel> stateChangeListener) throws TException {
         TCommandTransfer transferObject = createCommandTransferObject(agentInfo, payload);
-        PinpointSocket socket = clusterManager.getSocket(agentInfo);
-
-        if (socket != null) {
-            return socket.openStream(serializeRequest(transferObject), messageListener, stateChangeListener);
+        List<PinpointSocket> socketList = clusterManager.getSocket(agentInfo);
+        if (CollectionUtils.nullSafeSize(socketList) == 1) {
+            PinpointSocket socket = socketList.get(0);
+            return socket.openStream(serializeRequest(transferObject), streamChannelEventHandler);
+        } else if (CollectionUtils.isEmpty(socketList)) {
+            throw new StreamException(StreamCode.CONNECTION_NOT_FOUND);
+        } else {
+            throw new StreamException(StreamCode.CONNECTION_DUPLICATED);
         }
+    }
 
-        return null;
+    @Override
+    public ClientStreamChannel openStreamAndAwait(AgentInfo agentInfo, TBase<?, ?> tBase, ClientStreamChannelEventHandler streamChannelEventHandler, long timeout) throws TException, StreamException {
+        byte[] payload = serializeRequest(tBase);
+        return openStreamAndAwait(agentInfo, payload, streamChannelEventHandler, timeout);
+    }
+
+    @Override
+    public ClientStreamChannel openStreamAndAwait(AgentInfo agentInfo, byte[] payload, ClientStreamChannelEventHandler streamChannelEventHandler, long timeout) throws TException, StreamException {
+        assertClusterEnabled();
+
+        TCommandTransfer transferObject = createCommandTransferObject(agentInfo, payload);
+        List<PinpointSocket> socketList = clusterManager.getSocket(agentInfo);
+        if (CollectionUtils.nullSafeSize(socketList) == 1) {
+            PinpointSocket socket = socketList.get(0);
+            return socket.openStreamAndAwait(serializeRequest(transferObject), streamChannelEventHandler, timeout);
+        } else if (CollectionUtils.isEmpty(socketList)) {
+            throw new StreamException(StreamCode.CONNECTION_NOT_FOUND);
+        } else {
+            throw new StreamException(StreamCode.CONNECTION_DUPLICATED);
+        }
+    }
+
+    private void assertClusterEnabled() throws StreamException {
+        if (!clusterManager.isEnabled()) {
+            throw new StreamException(StreamCode.CONNECTION_UNSUPPORT);
+        }
     }
 
     @Override
@@ -354,14 +383,20 @@ public class AgentServiceImpl implements AgentService {
 
     @Override
     public TBase<?, ?> deserializeResponse(byte[] objectData) throws TException {
-        Message<TBase<?, ?>> deserialize = SerializationUtils.deserialize(objectData, commandDeserializerFactory);
-        return deserialize.getData();
+        Message<TBase<?, ?>> message = SerializationUtils.deserialize(objectData, commandDeserializerFactory);
+        if (message == null) {
+            return null;
+        }
+        return message.getData();
     }
 
     @Override
     public TBase<?, ?> deserializeResponse(byte[] objectData, Message<TBase<?, ?>> defaultValue) {
-        Message<TBase<?, ?>> deserialize = SerializationUtils.deserialize(objectData, commandDeserializerFactory, defaultValue);
-        return deserialize.getData();
+        Message<TBase<?, ?>> message = SerializationUtils.deserialize(objectData, commandDeserializerFactory, defaultValue);
+        if (message == null) {
+            return null;
+        }
+        return message.getData();
     }
 
 }

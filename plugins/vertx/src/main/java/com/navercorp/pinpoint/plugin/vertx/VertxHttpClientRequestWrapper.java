@@ -19,11 +19,8 @@ package com.navercorp.pinpoint.plugin.vertx;
 import com.navercorp.pinpoint.bootstrap.logging.PLogger;
 import com.navercorp.pinpoint.bootstrap.logging.PLoggerFactory;
 import com.navercorp.pinpoint.bootstrap.plugin.request.ClientRequestWrapper;
-import com.navercorp.pinpoint.common.util.Assert;
-import com.navercorp.pinpoint.common.util.StringUtils;
-import io.netty.handler.codec.http.HttpHeaders;
+import java.util.Objects;
 import io.netty.handler.codec.http.HttpRequest;
-import io.vertx.core.http.HttpClientRequest;
 
 /**
  * @author jaehong.kim
@@ -37,7 +34,7 @@ public class VertxHttpClientRequestWrapper implements ClientRequestWrapper {
 
 
     public VertxHttpClientRequestWrapper(final HttpRequest httpRequest, final String host) {
-        this.httpRequest = Assert.requireNonNull(httpRequest, "httpRequest must not be null");
+        this.httpRequest = Objects.requireNonNull(httpRequest, "httpRequest");
         this.host = host;
     }
 

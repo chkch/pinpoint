@@ -28,6 +28,7 @@ import com.navercorp.pinpoint.bootstrap.interceptor.AroundInterceptor;
 import com.navercorp.pinpoint.bootstrap.logging.PLogger;
 import com.navercorp.pinpoint.bootstrap.logging.PLoggerFactory;
 import com.navercorp.pinpoint.common.trace.ServiceType;
+import com.navercorp.pinpoint.common.util.ArrayUtils;
 
 /**
  * @author HyunGil Jeong
@@ -41,10 +42,10 @@ public class MQExternalClientHandlerInterceptor implements AroundInterceptor {
 
     public MQExternalClientHandlerInterceptor(TraceContext traceContext, MethodDescriptor methodDescriptor) {
         if (traceContext == null) {
-            throw new NullPointerException("traceContext must not be null");
+            throw new NullPointerException("traceContext");
         }
         if (methodDescriptor == null) {
-            throw new NullPointerException("methodDescriptor must not be null");
+            throw new NullPointerException("methodDescriptor");
         }
         this.methodDescriptor = methodDescriptor;
     }
@@ -124,7 +125,7 @@ public class MQExternalClientHandlerInterceptor implements AroundInterceptor {
     }
 
     private AsyncContext getAsyncContext(Object[] args) {
-        if (args == null || args.length < 1) {
+        if (ArrayUtils.isEmpty(args)) {
             return null;
         }
         for (Object arg : args) {

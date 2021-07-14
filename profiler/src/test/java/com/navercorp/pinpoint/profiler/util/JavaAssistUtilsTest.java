@@ -16,16 +16,12 @@
 
 package com.navercorp.pinpoint.profiler.util;
 
-import javassist.*;
-
 import org.junit.Assert;
-import org.junit.Before;
 import org.junit.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 
@@ -37,41 +33,25 @@ public class JavaAssistUtilsTest {
     private static final String TEST_CLASS_NAME = "com.navercorp.pinpoint.profiler.util.JavaAssistUtilsTest";
 
     private final Logger logger = LoggerFactory.getLogger(JavaAssistUtilsTest.class.getName());
-    private ClassPool pool;
-
-    @Before
-    public void setUp() throws Exception {
-        pool = new ClassPool();
-        pool.appendSystemPath();
-    }
-
-    @Test
-    public void testGetParameterDescription() throws Exception {
-        CtClass ctClass = pool.get("java.lang.String");
-        CtMethod substring = ctClass.getDeclaredMethod("substring", new CtClass[]{CtClass.intType});
-
-        String ctDescription = JavaAssistUtils.getParameterDescription(substring.getParameterTypes());
-        logger.debug(ctDescription);
-
-        String clsDescription = JavaAssistUtils.getParameterDescription(new Class[]{int.class});
-        logger.debug(clsDescription);
-        Assert.assertEquals(ctDescription, clsDescription);
-    }
 
 
     @Test
     public void javaArraySize() {
-        Assert.assertEquals(JavaAssistUtils.getJavaObjectArraySize(""), 0);
-        Assert.assertEquals(JavaAssistUtils.getJavaObjectArraySize("[]"), 1);
-        Assert.assertEquals(JavaAssistUtils.getJavaObjectArraySize("[][][]"), 3);
+        Assert.assertEquals(0, JavaAssistUtils.getJavaObjectArraySize(""));
+        Assert.assertEquals(1, JavaAssistUtils.getJavaObjectArraySize("[]"));
+        Assert.assertEquals(3, JavaAssistUtils.getJavaObjectArraySize("[][][]"));
 
-        Assert.assertEquals(JavaAssistUtils.getJavaObjectArraySize("int"), 0);
-        Assert.assertEquals(JavaAssistUtils.getJavaObjectArraySize("int[]"), 1);
-        Assert.assertEquals(JavaAssistUtils.getJavaObjectArraySize("int[][][]"), 3);
+        Assert.assertEquals(0, JavaAssistUtils.getJavaObjectArraySize("int"));
+        Assert.assertEquals(1, JavaAssistUtils.getJavaObjectArraySize("int[]"));
+        Assert.assertEquals(3, JavaAssistUtils.getJavaObjectArraySize("int[][][]"));
 
+        Assert.assertEquals(0, JavaAssistUtils.getJavaObjectArraySize("java.lang.String"));
+        Assert.assertEquals(2, JavaAssistUtils.getJavaObjectArraySize("java.lang.String[][]"));
+    }
 
-        Assert.assertEquals(JavaAssistUtils.getJavaObjectArraySize("java.lang.String"), 0);
-        Assert.assertEquals(JavaAssistUtils.getJavaObjectArraySize("java.lang.String[][]"), 2);
+    @Test
+    public void javaArraySize_invalid() {
+        Assert.assertEquals(2, JavaAssistUtils.getJavaObjectArraySize("[]test[][]"));
     }
 
     @Test
@@ -216,105 +196,68 @@ public class JavaAssistUtilsTest {
         Assert.assertArrayEquals(JavaAssistUtils.parseParameterSignature("([[[I)"), new String[]{"int[][][]"});
     }
 
-    public void getLineNumber_testAPI(String params) {
-    }
-
-    @Test
-    public void testGetLineNumber() throws Exception {
-//        pool.appendClassPath(new ClassClassPath(AbstractHttpClient.class));
-        CtClass ctClass = pool.get("com.navercorp.pinpoint.profiler.util.JavaAssistUtilsTest");
-        CtClass params = pool.get("java.lang.String");
-        // non-javadoc, see interface HttpClient
-//        public synchronized final HttpParams getParams() {
-//            if (defaultParams == null) {
-//                defaultParams = createHttpParams();
-//            }
-//            return defaultParams;
-//        }
-
-        CtMethod setParams = ctClass.getDeclaredMethod("getLineNumber_testAPI", new CtClass[]{params});
-        int lineNumber = JavaAssistUtils.getLineNumber(setParams);
-        logger.debug("line:{}", lineNumber);
-
-        logger.debug(setParams.getName());
-        logger.debug(setParams.getLongName());
-
-        String[] paramName = JavaAssistUtils.getParameterVariableName(setParams);
-        logger.debug(Arrays.toString(paramName));
-        Assert.assertEquals(paramName.length, 1);
-        Assert.assertEquals(paramName[0], "params");
-
-        String[] parameterType = JavaAssistUtils.parseParameterSignature(setParams.getSignature());
-        String[] parameterType2 = JavaAssistUtils.getParameterType(setParams.getParameterTypes());
-        logger.debug(Arrays.toString(parameterType));
-        Assert.assertArrayEquals(parameterType, parameterType2);
-
-        String s = ApiUtils.mergeParameterVariableNameDescription(parameterType, paramName);
-        logger.debug(s);
-    }
-
-    public void testVariableNameError1_testAPI(boolean autoCommitFlag) {
-        logger.debug("testVariableNameError1_testAPI test api");
-    }
-
-    @Test
-    public void testVariableNameError1() throws Exception {
-        CtClass ctClass = pool.get(TEST_CLASS_NAME);
-        CtMethod setParams = ctClass.getDeclaredMethod("testVariableNameError1_testAPI", new CtClass[]{CtClass.booleanType});
-        int lineNumber = JavaAssistUtils.getLineNumber(setParams);
-        logger.debug("line:{}", lineNumber);
-
-        logger.debug(setParams.getName());
-        logger.debug(setParams.getLongName());
-
-        String[] paramName = JavaAssistUtils.getParameterVariableName(setParams);
-        logger.debug(Arrays.toString(paramName));
-        Assert.assertEquals(paramName.length, 1);
-        Assert.assertEquals(paramName[0], "autoCommitFlag");
-
-        String[] parameterType = JavaAssistUtils.parseParameterSignature(setParams.getSignature());
-        String[] parameterType2 = JavaAssistUtils.getParameterType(setParams.getParameterTypes());
-        logger.debug(Arrays.toString(parameterType));
-        Assert.assertArrayEquals(parameterType, parameterType2);
-
-        String s = ApiUtils.mergeParameterVariableNameDescription(parameterType, paramName);
-        logger.debug(s);
-    }
-
-    public void testVariableNameError2_testAPI(String sql) {
-        logger.debug("testVariableNameError1_testAPI test api");
-    }
-
-    @Test
-    public void testVariableNameError2() throws Exception {
-        CtClass ctClass = pool.get(TEST_CLASS_NAME);
-        CtClass params = pool.get("java.lang.String");
-        CtMethod setParams = ctClass.getDeclaredMethod("testVariableNameError2_testAPI", new CtClass[]{params});
-        int lineNumber = JavaAssistUtils.getLineNumber(setParams);
-
-        logger.debug(setParams.getName());
-        logger.debug(setParams.getLongName());
-
-        String[] paramName = JavaAssistUtils.getParameterVariableName(setParams);
-        logger.debug(Arrays.toString(paramName));
-        Assert.assertEquals(paramName.length, 1);
-        Assert.assertEquals(paramName[0], "sql");
-
-        String[] parameterType = JavaAssistUtils.parseParameterSignature(setParams.getSignature());
-        String[] parameterType2 = JavaAssistUtils.getParameterType(setParams.getParameterTypes());
-        logger.debug(Arrays.toString(parameterType));
-        Assert.assertArrayEquals(parameterType, parameterType2);
-
-        String s = ApiUtils.mergeParameterVariableNameDescription(parameterType, paramName);
-        logger.debug(s);
-    }
-
 
     @Test
     public void testGetParameterDescription2() throws Exception {
+        @SuppressWarnings("deprecation")
         String clsDescription = JavaAssistUtils.getParameterDescription(new Class[]{String.class, Integer.class});
-        logger.debug(clsDescription);
         Assert.assertEquals("(java.lang.String, java.lang.Integer)", clsDescription);
+    }
+
+    @Test
+    public void testJavaClassNameToJvmResourceName1() throws Exception {
+        Assert.assertEquals("java/lang/String.class", JavaAssistUtils.javaClassNameToJvmResourceName("java.lang.String"));
+    }
+
+    @Test
+    public void testJavaClassNameToJvmResourceName2() throws Exception {
+        Assert.assertEquals("java/lang/String.class", JavaAssistUtils.javaClassNameToJvmResourceName("java/lang/String"));
+    }
+
+    @Test
+    public void testToPinpointParameterType() {
+        int[][] stringArray = new int[0][0];
+        String parameterType = JavaAssistUtils.toPinpointParameterType(stringArray.getClass());
+        Assert.assertEquals("int[][]", parameterType);
+    }
+
+    @Test
+    public void javaClassNameToVariableName1() {
+        String variableName = JavaAssistUtils.javaClassNameToVariableName("Test$CgLib");
+        Assert.assertEquals("Test_CgLib", variableName);
+    }
+
+    @Test
+    public void javaClassNameToVariableName2() {
+        String variableName = JavaAssistUtils.javaClassNameToVariableName("Test$$CgLib");
+        Assert.assertEquals("Test__CgLib", variableName);
+    }
+
+    @Test
+    public void javaClassNameToVariableName3() {
+        String variableName = JavaAssistUtils.javaClassNameToVariableName("Test$");
+        Assert.assertEquals("Test_", variableName);
+    }
+
+    @Test
+    public void javaClassNameToVariableName_same_ref() {
+        String className = "Test";
+        String variableName = JavaAssistUtils.javaClassNameToVariableName(className);
+        Assert.assertSame(className, variableName);
+    }
+
+    @Test
+    public void getParameterDescription() {
+        String[] parameters = {"a", "b"};
+        String variableName = JavaAssistUtils.getParameterDescription(parameters);
+        Assert.assertEquals("(a, b)", variableName);
+    }
+
+    @Test
+    public void getParameterDescription_single() {
+        String[] parameters = {"a"};
+        String variableName = JavaAssistUtils.getParameterDescription(parameters);
+        Assert.assertEquals("(a)", variableName);
     }
 
 }

@@ -19,17 +19,21 @@ package com.navercorp.pinpoint.web.dao.hbase.stat;
 
 import com.navercorp.pinpoint.common.server.bo.stat.ActiveTraceBo;
 import com.navercorp.pinpoint.common.server.bo.stat.AgentStatDataPoint;
+import com.navercorp.pinpoint.common.server.bo.stat.AgentUriStatBo;
 import com.navercorp.pinpoint.common.server.bo.stat.CpuLoadBo;
 import com.navercorp.pinpoint.common.server.bo.stat.DataSourceListBo;
-import com.navercorp.pinpoint.common.server.bo.stat.DeadlockBo;
+import com.navercorp.pinpoint.common.server.bo.stat.DeadlockThreadCountBo;
 import com.navercorp.pinpoint.common.server.bo.stat.DirectBufferBo;
 import com.navercorp.pinpoint.common.server.bo.stat.FileDescriptorBo;
 import com.navercorp.pinpoint.common.server.bo.stat.JvmGcBo;
 import com.navercorp.pinpoint.common.server.bo.stat.JvmGcDetailedBo;
 import com.navercorp.pinpoint.common.server.bo.stat.ResponseTimeBo;
 import com.navercorp.pinpoint.common.server.bo.stat.TransactionBo;
+import com.navercorp.pinpoint.common.server.bo.stat.TotalThreadCountBo;
+import com.navercorp.pinpoint.common.server.bo.stat.LoadedClassBo;
 import com.navercorp.pinpoint.web.dao.stat.ActiveTraceDao;
 import com.navercorp.pinpoint.web.dao.stat.AgentStatDao;
+import com.navercorp.pinpoint.web.dao.stat.AgentUriStatDao;
 import com.navercorp.pinpoint.web.dao.stat.CpuLoadDao;
 import com.navercorp.pinpoint.web.dao.stat.DataSourceDao;
 import com.navercorp.pinpoint.web.dao.stat.DeadlockDao;
@@ -39,6 +43,8 @@ import com.navercorp.pinpoint.web.dao.stat.JvmGcDao;
 import com.navercorp.pinpoint.web.dao.stat.JvmGcDetailedDao;
 import com.navercorp.pinpoint.web.dao.stat.ResponseTimeDao;
 import com.navercorp.pinpoint.web.dao.stat.TransactionDao;
+import com.navercorp.pinpoint.web.dao.stat.TotalThreadCountDao;
+import com.navercorp.pinpoint.web.dao.stat.LoadedClassCountDao;
 import org.springframework.beans.factory.FactoryBean;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -224,7 +230,7 @@ abstract class AgentStatDaoFactory<T extends AgentStatDataPoint, D extends Agent
     }
 
     @Repository("deadlockDaoFactory")
-    public static class DeadlockDaoFactory extends AgentStatDaoFactory<DeadlockBo, DeadlockDao> implements FactoryBean<DeadlockDao> {
+    public static class DeadlockDaoFactory extends AgentStatDaoFactory<DeadlockThreadCountBo, DeadlockDao> implements FactoryBean<DeadlockDao> {
 
         @Autowired
         public void setV2(@Qualifier("deadlockDaoV2") DeadlockDao v2) {
@@ -238,7 +244,7 @@ abstract class AgentStatDaoFactory<T extends AgentStatDataPoint, D extends Agent
 
         @Override
         public Class<?> getObjectType() {
-            return ResponseTimeDao.class;
+            return DeadlockDao.class;
         }
 
         @Override
@@ -294,4 +300,64 @@ abstract class AgentStatDaoFactory<T extends AgentStatDataPoint, D extends Agent
             return true;
         }
     }
+
+    @Repository("totalThreadCountDaoFactory")
+    public static class TotalThreadCountDaoFactory extends AgentStatDaoFactory<TotalThreadCountBo, TotalThreadCountDao> implements FactoryBean<TotalThreadCountDao> {
+
+        @Autowired
+        public void setV2(@Qualifier("totalThreadCountDaoV2") TotalThreadCountDao v2) {this.v2 = v2; }
+        @Override
+        public TotalThreadCountDao getObject() throws Exception {
+            return super.getDao();
+        }
+
+        @Override
+        public Class<?> getObjectType() { return TotalThreadCountDao.class; }
+
+        @Override
+        public boolean isSingleton() { return true; }
+    }
+
+    @Repository("loadedClassCountDaoFactory")
+    public static class LoadedClassDaoFactory extends AgentStatDaoFactory<LoadedClassBo, LoadedClassCountDao> implements FactoryBean<LoadedClassCountDao> {
+
+        @Autowired
+        public void setV2(@Qualifier("loadedClassDaoV2") LoadedClassCountDao v2) {this.v2 = v2; }
+        @Override
+        public LoadedClassCountDao getObject() throws Exception {
+            return super.getDao();
+        }
+
+        @Override
+        public Class<?> getObjectType() { return LoadedClassCountDao.class; }
+
+        @Override
+        public boolean isSingleton() { return true; }
+    }
+
+    @Repository("agentUriStatDao")
+    public static class AgentUriStatDaoFactory extends AgentStatDaoFactory<AgentUriStatBo, AgentUriStatDao>
+            implements FactoryBean<AgentUriStatDao> {
+
+        @Autowired
+        public void setV2(@Qualifier("agentUriStatDaoV2") AgentUriStatDao v2) {
+            this.v2 = v2;
+        }
+
+        @Override
+        public AgentUriStatDao getObject() throws Exception {
+            return super.getDao();
+        }
+
+        @Override
+        public Class<?> getObjectType() {
+            return AgentUriStatDao.class;
+        }
+
+        @Override
+        public boolean isSingleton() {
+            return true;
+        }
+    }
+
 }

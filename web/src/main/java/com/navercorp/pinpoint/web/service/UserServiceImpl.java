@@ -15,14 +15,22 @@
  */
 package com.navercorp.pinpoint.web.service;
 
-import java.util.List;
-
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.stereotype.Service;
-
 import com.navercorp.pinpoint.web.dao.UserDao;
+import com.navercorp.pinpoint.web.util.DefaultUserInfoDecoder;
+import com.navercorp.pinpoint.web.util.DefaultUserInfoEncoder;
+import com.navercorp.pinpoint.web.util.UserInfoDecoder;
+import com.navercorp.pinpoint.web.util.UserInfoEncoder;
 import com.navercorp.pinpoint.web.vo.User;
+
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.util.List;
+import java.util.Objects;
+import java.util.Optional;
 
 /**
  * @author minwoo.jung
@@ -31,47 +39,83 @@ import org.springframework.transaction.annotation.Transactional;
 @Transactional(rollbackFor = {Exception.class})
 public class UserServiceImpl implements UserService {
 
-    @Autowired
-    UserDao userDao;
+    private static final String EMPTY = "";
+
+    private final UserDao userDao;
+
+    private final UserInfoDecoder userInfoDecoder;
+    private final UserInfoEncoder userInfoEncoder;
+
+    public UserServiceImpl(UserDao userDao, Optional<UserInfoDecoder> userInfoDecoder, Optional<UserInfoEncoder> userInfoEncoder) {
+        this.userDao = Objects.requireNonNull(userDao, "userDao");
+        this.userInfoDecoder = Objects.requireNonNull(userInfoDecoder, "userInfoDecoder").orElse(DefaultUserInfoDecoder.EMPTY_USER_INFO_DECODER);
+        this.userInfoEncoder = Objects.requireNonNull(userInfoEncoder, "userInfoEncoder").orElse(DefaultUserInfoEncoder.EMPTY_USER_INFO_ENCODER);
+    }
     
     @Override
     public void insertUser(User user) {
-        userDao.insertUser(user);
+        User encodedUser = userInfoEncoder.encodeUserInfo(user);
+        userDao.insertUser(encodedUser);
     }
 
     @Override
-    public void deleteUser(User user) {
-        userDao.deleteUser(user);
+    public void deleteUser(String userId) {
+        userDao.deleteUser(userId);
     }
 
 
     @Override
     public void updateUser(User user) {
-        userDao.updateUser(user);
+        User encodedUser = userInfoEncoder.encodeUserInfo(user);
+        userDao.updateUser(encodedUser);
     }
 
     @Override
     @Transactional(readOnly = true)
     public List<User> selectUser() {
-        return userDao.selectUser();
+        List<User> userList = userDao.selectUser();
+        return userInfoDecoder.decodeUserInfoList(userList);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<User> searchUser(String condition) {
+        List<User> userList = userDao.searchUser(condition);
+        return userInfoDecoder.decodeUserInfoList(userList);
     }
 
     @Override
     @Transactional(readOnly = true)
     public User selectUserByUserId(String userId) {
-        return userDao.selectUserByUserId(userId);
+        User user = userDao.selectUserByUserId(userId);
+        return userInfoDecoder.decodeUserInfo(user);
     }
-
+    
+    @Override
+    @Transactional(readOnly = true)
+    public List<User> selectUserByUserGroupId(String userGroupId) {
+        List<User> userList = userDao.selectUserByUserGroupId(userGroupId);
+        return userInfoDecoder.decodeUserInfoList(userList);
+    }
+    
     @Override
     @Transactional(readOnly = true)
     public List<User> selectUserByUserName(String userName) {
-        return userDao.selectUserByUserName(userName);
+        List<User> userList = userDao.selectUserByUserName(userName);
+        return userInfoDecoder.decodeUserInfoList(userList);
     }
 
     @Override
     @Transactional(readOnly = true)
     public List<User> selectUserByDepartment(String department) {
-        return userDao.selectUserByDepartment(department);
+        List<User> userList = userDao.selectUserByDepartment(department);
+        return userInfoDecoder.decodeUserInfoList(userList);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public boolean isExistUserId(String userId) {
+        return userDao.isExistUserId(userId);
     }
 
     @Override
@@ -80,8 +124,22 @@ public class UserServiceImpl implements UserService {
     }
 
     @Override
-    public void insertUserList(List<User> users) {
-        userDao.insertUserList(users);
+    public void insertUserList(List<User> userList) {
+        List<User> encodedUserList = userInfoEncoder.encodeUserInfoList(userList);
+        userDao.insertUserList(encodedUserList);
     }
 
+    @Override
+    @Transactional(readOnly = true, propagation = Propagation.SUPPORTS)
+    public String getUserIdFromSecurity() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication != null) {
+            Object principal = authentication.getPrincipal();
+            if (principal instanceof String) {
+                return (String)authentication.getPrincipal();
+            }
+        }
+
+        return EMPTY;
+    }
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright 2017 NAVER Corp.
+ * Copyright 2018 NAVER Corp.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,11 +19,16 @@ package com.navercorp.pinpoint.profiler.context.provider;
 import com.google.inject.Inject;
 import com.google.inject.Provider;
 import com.navercorp.pinpoint.bootstrap.config.ProfilerConfig;
-import com.navercorp.pinpoint.common.util.Assert;
 import com.navercorp.pinpoint.profiler.AgentInfoSender;
 import com.navercorp.pinpoint.profiler.context.ServerMetaDataRegistryService;
+import com.navercorp.pinpoint.profiler.context.module.AgentDataSender;
+import com.navercorp.pinpoint.profiler.context.module.ResultConverter;
+import com.navercorp.pinpoint.profiler.context.thrift.MessageConverter;
 import com.navercorp.pinpoint.profiler.sender.EnhancedDataSender;
+import com.navercorp.pinpoint.profiler.sender.ResultResponse;
 import com.navercorp.pinpoint.profiler.util.AgentInfoFactory;
+
+import java.util.Objects;
 
 /**
  * @author Woonduk Kang(emeroad)
@@ -32,20 +37,23 @@ import com.navercorp.pinpoint.profiler.util.AgentInfoFactory;
 public class AgentInfoSenderProvider implements Provider<AgentInfoSender> {
 
     private final ProfilerConfig profilerConfig;
-    private final Provider<EnhancedDataSender> enhancedDataSenderProvider;
+    private final Provider<EnhancedDataSender<Object>> enhancedDataSenderProvider;
     private final Provider<AgentInfoFactory> agentInfoFactoryProvider;
     private final ServerMetaDataRegistryService serverMetaDataRegistryService;
+    private final MessageConverter<ResultResponse> messageConverter;
 
     @Inject
     public AgentInfoSenderProvider(
             ProfilerConfig profilerConfig,
-            Provider<EnhancedDataSender> enhancedDataSenderProvider,
+            @AgentDataSender Provider<EnhancedDataSender<Object>> enhancedDataSenderProvider,
             Provider<AgentInfoFactory> agentInfoFactoryProvider,
-            ServerMetaDataRegistryService serverMetaDataRegistryService) {
-        this.profilerConfig = Assert.requireNonNull(profilerConfig, "profilerConfig must not be null");
-        this.enhancedDataSenderProvider = Assert.requireNonNull(enhancedDataSenderProvider, "enhancedDataSenderProvider must not be null");
-        this.agentInfoFactoryProvider = Assert.requireNonNull(agentInfoFactoryProvider, "agentInfoFactoryProvider must not be null");
-        this.serverMetaDataRegistryService = Assert.requireNonNull(serverMetaDataRegistryService, "serverMetaDataRegistryService must not be null");
+            ServerMetaDataRegistryService serverMetaDataRegistryService,
+            @ResultConverter MessageConverter<ResultResponse> messageConverter) {
+        this.profilerConfig = Objects.requireNonNull(profilerConfig, "profilerConfig");
+        this.enhancedDataSenderProvider = Objects.requireNonNull(enhancedDataSenderProvider, "enhancedDataSenderProvider");
+        this.agentInfoFactoryProvider = Objects.requireNonNull(agentInfoFactoryProvider, "agentInfoFactoryProvider");
+        this.serverMetaDataRegistryService = Objects.requireNonNull(serverMetaDataRegistryService, "serverMetaDataRegistryService");
+        this.messageConverter = Objects.requireNonNull(messageConverter, "messageConverter");
     }
 
     @Override
@@ -54,6 +62,7 @@ public class AgentInfoSenderProvider implements Provider<AgentInfoSender> {
         final AgentInfoFactory agentInfoFactory = this.agentInfoFactoryProvider.get();
         final AgentInfoSender agentInfoSender = new AgentInfoSender.Builder(enhancedDataSender, agentInfoFactory)
                 .sendInterval(profilerConfig.getAgentInfoSendRetryInterval())
+                .setMessageConverter(this.messageConverter)
                 .build();
         serverMetaDataRegistryService.addListener(new ServerMetaDataRegistryService.OnChangeListener() {
             @Override

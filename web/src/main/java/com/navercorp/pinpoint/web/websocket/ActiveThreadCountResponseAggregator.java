@@ -16,8 +16,8 @@
 
 package com.navercorp.pinpoint.web.websocket;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
 import com.navercorp.pinpoint.common.server.util.AgentLifeCycleState;
+import com.navercorp.pinpoint.rpc.stream.StreamChannel;
 import com.navercorp.pinpoint.web.service.AgentService;
 import com.navercorp.pinpoint.web.task.TimerTaskDecorator;
 import com.navercorp.pinpoint.web.vo.AgentActiveThreadCount;
@@ -25,6 +25,8 @@ import com.navercorp.pinpoint.web.vo.AgentActiveThreadCountList;
 import com.navercorp.pinpoint.web.vo.AgentInfo;
 import com.navercorp.pinpoint.web.vo.AgentStatus;
 import com.navercorp.pinpoint.web.websocket.message.PinpointWebSocketMessageConverter;
+
+import com.fasterxml.jackson.core.JsonProcessingException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.web.socket.TextMessage;
@@ -39,6 +41,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.Executor;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -49,6 +52,8 @@ public class ActiveThreadCountResponseAggregator implements PinpointWebSocketRes
     private static final String APPLICATION_NAME = "applicationName";
     private static final String ACTIVE_THREAD_COUNTS = "activeThreadCounts";
     private static final String TIME_STAMP = "timeStamp";
+
+    private static final long DEFAULT_AGENT_LOOKUP_TIME = TimeUnit.HOURS.toMillis(3);
 
     private final static int LOG_RECORD_RATE = 60;
 
@@ -74,11 +79,11 @@ public class ActiveThreadCountResponseAggregator implements PinpointWebSocketRes
     private Map<String, AgentActiveThreadCount> activeThreadCountMap = new HashMap<>();
 
     public ActiveThreadCountResponseAggregator(String applicationName, AgentService agentService, Timer timer, TimerTaskDecorator timerTaskDecorator) {
-        this.applicationName = Objects.requireNonNull(applicationName, "applicationName must not be null");
-        this.agentService = Objects.requireNonNull(agentService, "agentService must not be null");
+        this.applicationName = Objects.requireNonNull(applicationName, "applicationName");
+        this.agentService = Objects.requireNonNull(agentService, "agentService");
 
-        this.timer = Objects.requireNonNull(timer, "timer must not be null");
-        this.timerTaskDecorator = Objects.requireNonNull(timerTaskDecorator, "timerTaskDecorator must not be null");
+        this.timer = Objects.requireNonNull(timer, "timer");
+        this.timerTaskDecorator = Objects.requireNonNull(timerTaskDecorator, "timerTaskDecorator");
 
         this.messageConverter = new PinpointWebSocketMessageConverter();
     }
@@ -117,26 +122,42 @@ public class ActiveThreadCountResponseAggregator implements PinpointWebSocketRes
 
         logger.info("addWebSocketSession. applicationName:{}, webSocketSession:{}", applicationName, webSocketSession);
 
-        List<AgentInfo> agentInfoList = agentService.getRecentAgentInfoList(applicationName);
+        List<AgentInfo> agentInfoList = agentService.getRecentAgentInfoList(applicationName, DEFAULT_AGENT_LOOKUP_TIME);
         synchronized (workerManagingLock) {
             if (isStopped) {
                 return;
             }
 
+            Map<AgentInfo, StreamChannel> streamChannelMap = new HashMap<>(agentInfoList.size());
             for (AgentInfo agentInfo : agentInfoList) {
                 AgentStatus agentStatus = agentInfo.getStatus();
                 if (agentStatus != null && agentStatus.getState() != AgentLifeCycleState.UNKNOWN) {
-                    activeWorker(agentInfo);
+                    StreamChannel streamChannel = registerWorkerAndConnectStream(agentInfo);
+                    streamChannelMap.put(agentInfo, streamChannel);
                 } else if (agentService.isConnected(agentInfo)) {
-                    activeWorker(agentInfo);
+                    StreamChannel streamChannel = registerWorkerAndConnectStream(agentInfo);
+                    streamChannelMap.put(agentInfo, streamChannel);
                 }
             }
 
-            boolean added = webSocketSessions.add(webSocketSession);
+            long maxAwaitTimeout = 3000;
+            long currentTimeMillis = System.currentTimeMillis();
+            for (Map.Entry<AgentInfo, StreamChannel> agentInfoStreamChannelEntry : streamChannelMap.entrySet()) {
+                AgentInfo agentInfo = agentInfoStreamChannelEntry.getKey();
+                StreamChannel streamChannel = agentInfoStreamChannelEntry.getValue();
+
+                long diff = System.currentTimeMillis() - currentTimeMillis;
+                long awaitTimeout = Math.max(maxAwaitTimeout - diff, 500);
+                activeWorker(agentInfo, streamChannel, awaitTimeout);
+            }
+
+            final boolean added = webSocketSessions.add(webSocketSession);
             if (added && webSocketSessions.size() == 1) {
                 workerActiveManager.startAgentCheckJob();
             }
         }
+
+        logger.info("addWebSocketSession() completed.");
     }
 
     // return when aggregator cleared.
@@ -182,6 +203,34 @@ public class ActiveThreadCountResponseAggregator implements PinpointWebSocketRes
         }
     }
 
+    private StreamChannel registerWorkerAndConnectStream(AgentInfo agentInfo) {
+        String agentId = agentInfo.getAgentId();
+
+        synchronized (workerManagingLock) {
+            ActiveThreadCountWorker worker = activeThreadCountWorkerRepository.get(agentId);
+            if (worker == null) {
+                worker = new ActiveThreadCountWorker(agentService, agentInfo, this, workerActiveManager);
+                StreamChannel streamChannel = worker.connect(agentInfo);
+                activeThreadCountWorkerRepository.put(agentId, worker);
+                return streamChannel;
+            } else {
+                throw new IllegalArgumentException("Already registered agentId(" + agentId + ")");
+            }
+        }
+    }
+
+    private void activeWorker(AgentInfo agentInfo, StreamChannel streamChannel, long waitTimeout) {
+        String agentId = agentInfo.getAgentId();
+
+        synchronized (workerManagingLock) {
+            ActiveThreadCountWorker worker = activeThreadCountWorkerRepository.get(agentId);
+            if (worker == null) {
+                throw new IllegalArgumentException("Could not find AgentInfo(" + agentId + ")");
+            }
+            worker.active(streamChannel, waitTimeout);
+        }
+    }
+
     private void activeWorker(AgentInfo agentInfo) {
         String agentId = agentInfo.getAgentId();
 
@@ -189,7 +238,8 @@ public class ActiveThreadCountResponseAggregator implements PinpointWebSocketRes
             ActiveThreadCountWorker worker = activeThreadCountWorkerRepository.get(agentId);
             if (worker == null) {
                 worker = new ActiveThreadCountWorker(agentService, agentInfo, this, workerActiveManager);
-                worker.start(agentInfo);
+                StreamChannel streamChannel = worker.connect(agentInfo);
+                worker.active(streamChannel, 3000);
 
                 activeThreadCountWorkerRepository.put(agentId, worker);
             } else {
@@ -250,7 +300,7 @@ public class ActiveThreadCountResponseAggregator implements PinpointWebSocketRes
     }
 
     private TextMessage createWebSocketTextMessage(AgentActiveThreadCountList activeThreadCountList) {
-        Map resultMap = createResultMap(activeThreadCountList, System.currentTimeMillis());
+        Map<String, Object> resultMap = createResultMap(activeThreadCountList, System.currentTimeMillis());
         try {
             String response = messageConverter.getResponseTextMessage(ActiveThreadCountHandler.API_ACTIVE_THREAD_COUNT, resultMap);
             TextMessage responseTextMessage = new TextMessage(response);
@@ -287,7 +337,7 @@ public class ActiveThreadCountResponseAggregator implements PinpointWebSocketRes
         return applicationName;
     }
 
-    private Map createResultMap(AgentActiveThreadCountList activeThreadCount, long timeStamp) {
+    private Map<String, Object> createResultMap(AgentActiveThreadCountList activeThreadCount, long timeStamp) {
         Map<String, Object> response = new HashMap<>();
 
         response.put(APPLICATION_NAME, applicationName);

@@ -4,7 +4,7 @@ keywords: docker pinpoint, pinpoint install
 last_updated: May 14, 2018
 sidebar: mydoc_sidebar
 permalink: docker.html
-disqus: true
+disqus: false
 ---
 
 ## Want to install Pinpoint inside docker?
@@ -12,4 +12,4 @@ disqus: true
 We've create docker files to support docker.  
 Installing Pinpoint with these docker files will take approximately 10min. to check out the features of Pinpoint.
 
-Visit [Official Pinpoint-Docker repository](https://github.com/naver/pinpoint-docker) for more information.
+Visit [Official Pinpoint-Docker repository](https://github.com/pinpoint-apm/pinpoint-docker) for more information.

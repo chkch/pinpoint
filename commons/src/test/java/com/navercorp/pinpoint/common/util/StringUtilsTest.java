@@ -186,7 +186,7 @@ public class StringUtilsTest {
             return Collections.emptyList();
         }
         if (separator == null) {
-            throw new NullPointerException("separator must not be null");
+            throw new NullPointerException("separator");
         }
         final List<String> result = new ArrayList<String>();
         final String[] split = value.split(separator);
@@ -242,5 +242,11 @@ public class StringUtilsTest {
         Assert.assertFalse(StringUtils.hasText("  "));
 
     }
+
+    @Test
+    public void abbreviateBufferSize() {
+        Assert.assertEquals("a...(123)".length(), StringUtils.abbreviateBufferSize(1, 123));
+    }
+
 
 }

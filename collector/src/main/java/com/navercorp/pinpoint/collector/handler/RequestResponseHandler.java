@@ -18,7 +18,6 @@ package com.navercorp.pinpoint.collector.handler;
 
 import com.navercorp.pinpoint.io.request.ServerRequest;
 import com.navercorp.pinpoint.io.request.ServerResponse;
-import org.apache.thrift.TBase;
 import org.springframework.stereotype.Service;
 
 /**
@@ -26,8 +25,7 @@ import org.springframework.stereotype.Service;
  * @author koo.taejin
  */
 @Service
-public interface RequestResponseHandler {
+public interface RequestResponseHandler<REQ, RES> {
 
-    void handleRequest(ServerRequest serverRequest, ServerResponse serverResponse);
-
+    void handleRequest(ServerRequest<REQ> serverRequest, ServerResponse<RES> serverResponse);
 }

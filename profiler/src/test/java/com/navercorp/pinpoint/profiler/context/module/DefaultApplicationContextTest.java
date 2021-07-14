@@ -86,9 +86,10 @@ public class DefaultApplicationContextTest {
     private DefaultApplicationContext newApplicationContext() {
         ProfilerConfig profilerConfig = spy(new DefaultProfilerConfig());
         when(profilerConfig.getStaticResourceCleanup()).thenReturn(true);
+//        when(profilerConfig.getTransportModule()).thenReturn("GRPC");
 
         Instrumentation instrumentation = mock(Instrumentation.class);
-        AgentOption agentOption = new DefaultAgentOption(instrumentation, "mockAgent", "mockApplicationName", false,
+        AgentOption agentOption = new DefaultAgentOption(instrumentation, "mockAgentId", "mockAgentName", "mockApplicationName", false,
                 profilerConfig, Collections.<String>emptyList(), null);
 
         InterceptorRegistryBinder interceptorRegistryBinder = new TestInterceptorRegistryBinder();

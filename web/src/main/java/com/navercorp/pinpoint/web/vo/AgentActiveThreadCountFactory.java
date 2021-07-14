@@ -24,6 +24,7 @@ import org.apache.thrift.TBase;
 
 import java.util.Collections;
 import java.util.List;
+import java.util.Objects;
 
 /**
  * @author Taejin Koo
@@ -42,9 +43,7 @@ public class AgentActiveThreadCountFactory {
     }
 
     public AgentActiveThreadCount create(TBase<?, ?> value) {
-        if (agentId == null) {
-            throw new NullPointerException("agentId must not be null");
-        }
+        Objects.requireNonNull(value, "value");
 
         if (value instanceof TCmdActiveThreadCountRes) {
             TCmdActiveThreadCountRes response = (TCmdActiveThreadCountRes) value;
@@ -69,9 +68,7 @@ public class AgentActiveThreadCountFactory {
     }
 
     public AgentActiveThreadCount createFail(short code, String message) {
-        if (agentId == null) {
-            throw new NullPointerException("agentId must not be null");
-        }
+        Objects.requireNonNull(code, "code");
 
         return createFail0(code, message);
     }
@@ -85,14 +82,14 @@ public class AgentActiveThreadCountFactory {
         AgentActiveThreadCount.Builder builder = new AgentActiveThreadCount.Builder();
         builder.setAgentId(agentId);
         builder.setActiveThreadCountList(activeThreadCountList);
-        builder.setStatus(builder.SUCCESS_STATUS);
+        builder.setStatus(AgentActiveThreadCount.Builder.SUCCESS_STATUS);
         return builder.build();
     }
 
     private AgentActiveThreadCount createFail0(short code, String codeMessage) {
         AgentActiveThreadCount.Builder builder = new AgentActiveThreadCount.Builder();
         builder.setAgentId(agentId);
-        builder.setActiveThreadCountList(Collections.EMPTY_LIST);
+        builder.setActiveThreadCountList(Collections.emptyList());
         builder.setStatus(code, codeMessage);
         return builder.build();
     }

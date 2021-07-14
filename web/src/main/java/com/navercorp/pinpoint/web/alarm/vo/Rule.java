@@ -29,12 +29,13 @@ public class Rule {
     private String userGroupId;
     private boolean smsSend;
     private boolean emailSend;
+    private boolean webhookSend;
     private String notes;
 
     public Rule() {
     }
 
-    public Rule(String applicationId, String serviceType, String checkerName, Integer Threshold, String userGroupId, boolean smsSend, boolean emailSend, String notes) {
+    public Rule(String applicationId, String serviceType, String checkerName, Integer Threshold, String userGroupId, boolean smsSend, boolean emailSend, boolean webhookSend, String notes) {
         this.applicationId = applicationId;
         this.serviceType = serviceType;
         this.checkerName = checkerName;
@@ -42,6 +43,7 @@ public class Rule {
         this.userGroupId = userGroupId;
         this.smsSend = smsSend;
         this.emailSend = emailSend;
+        this.webhookSend = webhookSend;
         this.notes = notes;
     }
 
@@ -81,7 +83,7 @@ public class Rule {
         return userGroupId;
     }
 
-    public void setuserGroupId(String userGroupId) {
+    public void setUserGroupId(String userGroupId) {
         this.userGroupId = userGroupId;
     }
 
@@ -100,6 +102,14 @@ public class Rule {
     public void setEmailSend(boolean emailSend) {
         this.emailSend = emailSend;
     }
+    
+    public boolean isWebhookSend() {
+        return webhookSend;
+    }
+    
+    public void setWebhookSend(boolean webhookSend) {
+        this.webhookSend = webhookSend;
+    }
 
     public String getRuleId() {
         return ruleId;
@@ -115,5 +125,22 @@ public class Rule {
 
     public void setNotes(String notes) {
         this.notes = notes;
+    }
+    
+    @Override
+    public String toString() {
+        final StringBuilder sb = new StringBuilder("Rule{");
+        sb.append("ruleId='").append(ruleId).append('\'');
+        sb.append(", applicationId='").append(applicationId).append('\'');
+        sb.append(", serviceType='").append(serviceType).append('\'');
+        sb.append(", checkerName='").append(checkerName).append('\'');
+        sb.append(", threshold=").append(threshold);
+        sb.append(", userGroupId='").append(userGroupId).append('\'');
+        sb.append(", smsSend=").append(smsSend);
+        sb.append(", emailSend=").append(emailSend);
+        sb.append(", webhookSend=").append(webhookSend);
+        sb.append(", notes='").append(notes).append('\'');
+        sb.append('}');
+        return sb.toString();
     }
 }

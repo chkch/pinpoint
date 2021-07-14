@@ -23,12 +23,14 @@ import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.client.metrics.ScanMetrics;
 import org.apache.hadoop.hbase.util.Bytes;
 
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Objects;
 import java.util.concurrent.ExecutorService;
 
 /**
@@ -42,19 +44,11 @@ public class ParallelResultScanner implements ResultScanner {
     private Result next = null;
 
     public ParallelResultScanner(TableName tableName, HbaseAccessor hbaseAccessor, ExecutorService executor, Scan originalScan, AbstractRowKeyDistributor keyDistributor, int numParallelThreads) throws IOException {
-        if (hbaseAccessor == null) {
-            throw new NullPointerException("hbaseAccessor must not be null");
-        }
-        if (executor == null) {
-            throw new NullPointerException("executor must not be null");
-        }
-        if (keyDistributor == null) {
-            throw new NullPointerException("keyDistributor must not be null");
-        }
-        if (originalScan == null) {
-            throw new NullPointerException("originalScan must not be null");
-        }
-        this.keyDistributor = keyDistributor;
+        Objects.requireNonNull(hbaseAccessor, "hbaseAccessor");
+        Objects.requireNonNull(executor, "executor");
+        Objects.requireNonNull(originalScan, "originalScan");
+
+        this.keyDistributor = Objects.requireNonNull(keyDistributor, "keyDistributor");
 
         final ScanTaskConfig scanTaskConfig = new ScanTaskConfig(tableName, hbaseAccessor, keyDistributor, originalScan.getCaching());
         final Scan[] splitScans = splitScans(originalScan);
@@ -176,6 +170,14 @@ public class ParallelResultScanner implements ResultScanner {
         for (ScanTask scanTask : this.scanTasks) {
             scanTask.close();
         }
+    }
+
+    public boolean renewLease() {
+        return false;
+    }
+
+    public ScanMetrics getScanMetrics() {
+        return null;
     }
 
     @Override
